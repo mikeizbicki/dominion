@@ -1,4 +1,8 @@
 import Data.List
+import Control.Monad
+import Control.Monad.Random
+import System.Random.Shuffle
+import Debug.Trace
 
 ----------------------------------------
 
@@ -71,6 +75,9 @@ copper = CardID "copper"
 estate :: CardID
 estate = CardID "estate"
 
+province :: CardID
+province = CardID "province"
+
 village :: CardID
 village = CardID "village"
 
@@ -100,15 +107,20 @@ data PlayerState = PlayerState
     , actions :: Int
     , buys :: Int
     , money :: Int
+    , stdgen :: StdGen 
     }
     deriving (Show)
 
 drawCard :: PlayerState -> PlayerState
 drawCard ps = case deck ps of
     [] -> drawCard $ ps
-        { deck = discard ps
+        { deck = deck'
         , discard = []
+        , stdgen = sg2
         }
+        where 
+            (sg1,sg2) = split $ stdgen ps
+            deck' = shuffle' (discard ps) (length $ discard ps) sg1
     (x:xs) -> ps
         { deck = tail $ deck ps
         , hand = head (deck ps) : hand ps
@@ -123,8 +135,8 @@ getVictoryPoints ps = go $ getAllCards ps
         go [] = 0
         go (x:xs) = idVPs x ps + go xs
 
-initPlayerState :: PlayerState
-initPlayerState = PlayerState
+initPlayerState :: StdGen -> PlayerState
+initPlayerState stdgen = PlayerState
     { deck = replicate 7 copper ++ replicate 3 estate
     , hand = []
     , played = []
@@ -132,6 +144,7 @@ initPlayerState = PlayerState
     , actions = 0
     , buys = 0
     , money = 0
+    , stdgen = stdgen
     }
 
 resetTurn :: PlayerState -> PlayerState
@@ -143,6 +156,7 @@ resetTurn ps = drawCard $ drawCard $ drawCard $ drawCard $ drawCard $ PlayerStat
     , actions = 1
     , buys = 1
     , money = 0
+    , stdgen = stdgen ps
     }
 
 ----------------------------------------
@@ -176,9 +190,9 @@ cardsInSupply gs c = case lookup c $ supply gs of
     Nothing -> 0
     Just i -> i
 
-initGameState :: Int -> GameState
-initGameState n = GameState
-    { playerStates = map resetTurn $ replicate n initPlayerState
+initGameState :: StdGen -> Int -> GameState
+initGameState sg n = GameState
+    { playerStates = mkPlayerStates sg n
     , supply = 
         [ (copper,100)
         , (estate,10)
@@ -187,6 +201,12 @@ initGameState n = GameState
         ]
     , currentPlayer = 0
     }
+    where
+        mkPlayerStates sg 0 = []
+        mkPlayerStates sg i = initPlayerState sg1:mkPlayerStates sg2 (i-1)
+            where
+                (sg1,sg2) = split sg
+--                 map resetTurn $ replicate n (initPlayerState sg)
 
 drawCardFromSupply :: CardID -> GameState -> GameState
 drawCardFromSupply c gs = gs { supply = map go $ supply gs }
@@ -217,18 +237,33 @@ doTurn gs = do
                 action = getAction gs
 
 isGameOver :: GameState -> Bool
-isGameOver gs = any go $ supply gs
+isGameOver gs = noprovince || empty3
     where
-        go (c,i) = if c==estate && i==0
-            then True
-            else False
+        noprovince = any go $ supply gs
+            where
+                go (c,i) = if c==province && i==0
+                    then True
+                    else False
+
+        empty3 = (sum $ map go $ supply gs) >= 3
+            where
+                go (_,0) = 1
+                go _     = 0
 
 runGame :: GameState -> IO ()
-runGame gs = if isGameOver gs
-    then return ()
-    else do
-        gs' <- doTurn gs
-        runGame gs' 
+runGame gs = do
+    go gs
+    putStrLn "==========================="
+    putStrLn "final results"
+    forM (playerStates gs) $ \ps -> do
+        putStrLn $ "  victory points: " ++ show (getVictoryPoints ps)
+    return ()
+    where
+        go gs = if isGameOver gs
+            then return ()
+            else do
+                gs' <- doTurn gs
+                go gs' 
 
 ----------------------------------------
 
