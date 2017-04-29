@@ -35,6 +35,7 @@ runSim t (Sim m) = do
     where
         go []            = return ()
         go ((t',str):xs) = do
+--             putStrLn str
             if t'<t
                 then putStrLn str
                 else return ()

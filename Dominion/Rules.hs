@@ -1,9 +1,10 @@
 module Dominion.Rules
     where
 
-import Data.List
 import Control.Monad
 import Control.Monad.Random
+import Data.List
+import Data.Monoid
 import System.Random.Shuffle
 import Debug.Trace
 
@@ -306,14 +307,20 @@ getScore gs n = Score
 data Action
     = Play Card
     | Buy Card
-    | Stop
+    | Pass
     deriving (Show)
 
+instance Monoid Action where
+    Pass `mappend` x = x
+    x    `mappend` _ = x
+    mempty = Pass
+
 doAction :: GameState -> Action -> Maybe GameState
-doAction gs Stop = Nothing
+doAction gs Pass = Nothing
 doAction gs (Play c) = do
     gs' <- updateCurrentPlayerState (putCardOnTable c) gs
-    cardAction c gs'
+    case cardAction c gs' of
+        Just x -> Just x
 doAction gs (Buy c) = if (cardCost c <= money ps) 
                       && (buys ps > 0) 
                       && (cardsInSupply gs c > 0)
