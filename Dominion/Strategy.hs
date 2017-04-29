@@ -35,10 +35,10 @@ buyVPs gs = case selectCard gs of
             go (_         :xs) = go xs
             go []              = Stop
 
-selectCard :: GameState -> Maybe CardID
+selectCard :: GameState -> Maybe Card
 selectCard gs = go $ hand $ getCurrentPlayerState gs
     where
-        go (x:xs) = case idAction x gs of
+        go (x:xs) = case cardAction x gs of
             Just ps' -> Just x
             Nothing -> go xs
         go [] = Nothing

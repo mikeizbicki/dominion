@@ -9,105 +9,186 @@ import Debug.Trace
 
 ----------------------------------------
 
-data CardInfo = CardInfo
-    { cardVPs :: PlayerState -> Int
-    , cardAction :: GameState -> Maybe GameState
-    , cardCost :: Int
+-- |
+--
+-- Invariant: 
+-- If any two instantiations of `Card` have the same `cardName`,
+-- then all other attributes must also be the same.
+-- There is no way to enforce this invariant within the type system.
+data Card = Card
+    { cardVPs       :: PlayerState -> Int
+    , cardAction    :: GameState -> Maybe GameState
+    , cardCost      :: Int
+    , cardName      :: String
     }
 
-newtype CardID = CardID String
-    deriving (Read,Eq,Ord)
+instance Show Card where
+    show = cardName
 
-instance Show CardID where show (CardID c) = c
+instance Eq Card where
+    c1==c2 = (cardName c1)==(cardName c2)
 
-cards :: [(CardID,CardInfo)]
-cards =
-    [ ( CardID "copper", CardInfo
-        { cardVPs = \_ -> 0
-        , cardAction = updateCurrentPlayerState $ \ps -> Just $ ps { money = money ps + 1 }
-        , cardCost = 0
-        } )
-    , ( CardID "silver", CardInfo
-        { cardVPs = \_ -> 0
-        , cardAction = updateCurrentPlayerState $ \ps -> Just $ ps { money = money ps + 2 }
-        , cardCost = 3
-        } )
-    , ( CardID "gold", CardInfo
-        { cardVPs = \_ -> 0
-        , cardAction = updateCurrentPlayerState $ \ps -> Just $ ps { money = money ps + 3 }
-        , cardCost = 6
-        } )
-    , ( CardID "estate", CardInfo
-        { cardVPs = \_ -> 1
-        , cardAction = \_ -> Nothing
-        , cardCost = 2
-        } )
-    , ( CardID "duchy", CardInfo
-        { cardVPs = \_ -> 3
-        , cardAction = \_ -> Nothing
-        , cardCost = 5
-        } )
-    , ( CardID "province", CardInfo
-        { cardVPs = \_ -> 6
-        , cardAction = \_ -> Nothing
-        , cardCost = 8
-        } )
-    , ( CardID "village", CardInfo
-        { cardVPs = \_ -> 0
-        , cardAction = updateCurrentPlayerState $ \ps -> if actions ps == 0
-            then Nothing
-            else Just $ drawCard $ ps
-                { actions = actions ps + 1 }
-        , cardCost = 3
-        } )
-    , ( CardID "woodcutter", CardInfo
-        { cardVPs = \_ -> 0
-        , cardAction = updateCurrentPlayerState $ \ps -> if actions ps == 0
-            then Nothing
-            else Just $ ps
-                { buys = buys ps + 1
-                , money = money ps + 2
-                , actions = actions ps - 1
-                }
-        , cardCost = 3
-        } )
+defSupply :: [(Card,Int)]
+defSupply =
+    [ (copper,100)
+    , (silver,100)
+    , (gold,100)
+    , (estate,10)
+    , (duchy,10)
+    , (province,10)
+    , (village,10)
+    , (woodcutter,10)
+    , (smithy,10)
+    , (councilRoom,10)
+    , (festival,10)
     ]
 
-copper :: CardID
-copper = CardID "copper"
+copper :: Card
+copper = Card
+    { cardVPs = \_ -> 0
+    , cardAction = actionAddMoney 1
+    , cardCost = 0
+    , cardName = "copper"
+    }
 
-estate :: CardID
-estate = CardID "estate"
+silver :: Card
+silver = Card
+    { cardVPs = \_ -> 0
+    , cardAction = actionAddMoney 2
+    , cardCost = 3
+    , cardName = "silver"
+    }
 
-province :: CardID
-province = CardID "province"
+gold :: Card
+gold = Card
+    { cardVPs = \_ -> 0
+    , cardAction = actionAddMoney 3
+    , cardCost = 6
+    , cardName = "gold"
+    }
 
-village :: CardID
-village = CardID "village"
+estate :: Card
+estate = Card
+    { cardVPs = \_ -> 1
+    , cardAction = actionNone
+    , cardCost = 2
+    , cardName = "estate" 
+    }
 
-woodcutter :: CardID
-woodcutter = CardID "woodcutter"
+duchy :: Card
+duchy = Card
+    { cardVPs = \_ -> 3
+    , cardAction = actionNone
+    , cardCost = 5
+    , cardName = "duchy"
+    } 
 
-lookupCardInfo :: CardID -> CardInfo
-lookupCardInfo id = case lookup id cards of
-    Just x -> x 
+province :: Card
+province = Card
+    { cardVPs = \_ -> 6
+    , cardAction = actionNone
+    , cardCost = 8
+    , cardName = "province"
+    } 
 
-idVPs :: CardID -> PlayerState -> Int
-idVPs = cardVPs . lookupCardInfo 
+village :: Card
+village = Card
+    { cardVPs = \_ -> 0
+    , cardAction = do
+        actionCost 1
+        actionDrawCards 1
+        actionAddActions 2
+    , cardCost = 3
+    , cardName = "village"
+    } 
 
-idAction :: CardID -> GameState -> Maybe GameState
-idAction = cardAction . lookupCardInfo 
+smithy :: Card
+smithy = Card
+    { cardVPs = \_ -> 0
+    , cardAction = do
+        actionCost 1
+        actionDrawCards 3
+    , cardCost = 3
+    , cardName = "smithy"
+    }
 
-idCost :: CardID -> Int
-idCost = cardCost . lookupCardInfo 
+councilRoom :: Card
+councilRoom = Card
+    { cardVPs = \_ -> 0
+    , cardAction = do
+        actionCost 1
+        actionDrawCards 3
+        actionAllPlayersDrawCards 1
+        actionAddBuys 1
+    , cardCost = 5
+    , cardName = "council room"
+    }
+
+festival :: Card
+festival = Card
+    { cardVPs = \_ -> 0
+    , cardAction = do
+        actionCost 1
+        actionAddActions 2
+        actionAddBuys 1
+        actionAddMoney 2
+    , cardCost = 5
+    , cardName = "festival"
+    }
+
+woodcutter :: Card
+woodcutter = Card
+    { cardVPs = \_ -> 0
+    , cardAction = do
+        actionCost 1
+        actionAddBuys 1
+        actionAddMoney 2
+    , cardCost = 3
+    , cardName="woodcutter"
+    }
+
+--------------------
+
+actionDrawCards :: Int -> GameState -> Maybe GameState
+actionDrawCards n gs = go n $ Just gs
+    where
+        go 0 mgs = mgs
+        go n mgs = case mgs of 
+            Nothing -> Nothing
+            Just gs -> go (n-1) $ updateCurrentPlayerState (\ps -> Just $ drawCard ps) gs
+
+actionAllPlayersDrawCards :: Int -> GameState -> Maybe GameState
+actionAllPlayersDrawCards n gs = Just $ go n gs
+    where
+        go 0 gs = gs
+        go n gs = go (n-1) $ gs { playerStates = map drawCard $ playerStates gs }
+
+actionAddActions :: Int -> GameState -> Maybe GameState
+actionAddActions n gs = actionCost (-n) gs
+
+actionCost :: Int -> GameState -> Maybe GameState
+actionCost n = updateCurrentPlayerState $ \ps -> if actions ps < n
+    then Nothing
+    else Just $ ps { actions = actions ps - n }
+
+actionAddBuys :: Int -> GameState -> Maybe GameState
+actionAddBuys n = updateCurrentPlayerState $ \ps -> if actions ps < n
+    then Nothing
+    else Just $ ps { buys = buys ps + n }
+
+actionAddMoney :: Int -> GameState -> Maybe GameState
+actionAddMoney n = updateCurrentPlayerState $ \ps -> Just $ ps {money = money ps + n }
+
+actionNone :: GameState -> Maybe GameState
+actionNone _ = Nothing
 
 ----------------------------------------
 
 data PlayerState = PlayerState
-    { deck :: [CardID]
-    , hand :: [CardID]
-    , played :: [CardID]
-    , discard :: [CardID]
+    { deck :: [Card]
+    , hand :: [Card]
+    , played :: [Card]
+    , discard :: [Card]
     , actions :: Int
     , buys :: Int
     , money :: Int
@@ -130,7 +211,7 @@ drawCard ps = case deck ps of
         , hand = head (deck ps) : hand ps
         }
 
-getAllCards :: PlayerState -> [CardID]
+getAllCards :: PlayerState -> [Card]
 getAllCards ps = deck ps ++ hand ps ++ played ps ++ discard ps
 
 initPlayerState :: StdGen -> PlayerState
@@ -161,10 +242,14 @@ resetTurn ps = drawCard $ drawCard $ drawCard $ drawCard $ drawCard $ PlayerStat
 
 data GameState = GameState
     { playerStates :: [PlayerState]
-    , supply :: [(CardID,Int)]
-    , currentPlayer :: Int 
+    , supply :: [(Card,Int)]
+    , currentPlayer :: PlayerID
     }
-    deriving (Show)
+
+type PlayerID = Int
+
+getPlayerIDs :: GameState -> [PlayerID]
+getPlayerIDs gs = [0..numPlayers gs-1]
 
 numPlayers :: GameState -> Int
 numPlayers gs = length $ playerStates gs
@@ -183,12 +268,12 @@ updateCurrentPlayerState f gs = do
     ps <- f $ getCurrentPlayerState gs
     return $ setCurrentPlayerState gs ps
 
-cardsInSupply :: GameState -> CardID -> Int
+cardsInSupply :: GameState -> Card -> Int
 cardsInSupply gs c = case lookup c $ supply gs of
     Nothing -> 0
     Just i -> i
 
-drawCardFromSupply :: CardID -> GameState -> GameState
+drawCardFromSupply :: Card -> GameState -> GameState
 drawCardFromSupply c gs = gs { supply = map go $ supply gs }
     where
         go (c',i) = if c==c' && i>0
@@ -201,45 +286,49 @@ data Score = Score
     { scoreVPs :: Int
     , scoreCards :: Int
     }
-    deriving (Read,Show,Eq)
+    deriving (Show,Eq)
 
 instance Ord Score where
     compare s1 s2 = case compare (scoreVPs s1) (scoreVPs s2) of
         EQ -> compare (scoreCards s1) (scoreCards s2)
         x  -> x
 
-getScore :: PlayerState -> Score
-getScore ps = Score
-    { scoreVPs = sum $ map (flip idVPs ps) $ getAllCards ps
+getScore :: GameState -> PlayerID -> Score
+getScore gs n = Score
+    { scoreVPs = sum $ map (\c -> cardVPs c ps) $ getAllCards ps
     , scoreCards = length $ getAllCards ps
     }
+    where
+        ps = playerStates gs !! n
 
 ----------------------------------------
 
 data Action
-    = Play CardID
-    | Buy CardID
+    = Play Card
+    | Buy Card
     | Stop
-    deriving (Read,Show)
+    deriving (Show)
 
 doAction :: GameState -> Action -> Maybe GameState
 doAction gs Stop = Nothing
 doAction gs (Play c) = do
     gs' <- updateCurrentPlayerState (putCardOnTable c) gs
-    idAction c gs'
-doAction gs (Buy c) = if (idCost c <= money ps) && (buys ps > 0) && (cardsInSupply gs c > 0)
+    cardAction c gs'
+doAction gs (Buy c) = if (cardCost c <= money ps) 
+                      && (buys ps > 0) 
+                      && (cardsInSupply gs c > 0)
     then Just $ drawCardFromSupply c
               $ setCurrentPlayerState gs 
               $ ps 
                 { discard = c:discard ps 
-                , money = money ps - idCost c
+                , money = money ps - cardCost c
                 , buys = buys ps - 1
                 }
     else Nothing
     where 
         ps = getCurrentPlayerState gs
 
-putCardOnTable :: CardID -> PlayerState -> Maybe PlayerState
+putCardOnTable :: Card -> PlayerState -> Maybe PlayerState
 putCardOnTable c ps = if c `elem` hand ps
     then Just ps
         { hand = delete c $ hand ps

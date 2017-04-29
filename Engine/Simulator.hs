@@ -63,12 +63,7 @@ defConfig = Config
 mkGameState :: StdGen -> Config -> GameState
 mkGameState sg cfg = GameState
     { playerStates = mkPlayerStates sg n
-    , supply = 
-        [ (copper,100)
-        , (estate,10)
-        , (village,10)
-        , (woodcutter,10)
-        ]
+    , supply = defSupply
     , currentPlayer = 0
     }
     where
@@ -87,8 +82,8 @@ runGame cfg = do
     gs <- go gs
     writeMsg Game "==========================="
     writeMsg Game "final results"
-    forM (playerStates gs) $ \ps -> do
-        writeMsg Game $ "  score: " ++ show (getScore ps)
+    forM (getPlayerIDs gs) $ \i -> do
+        writeMsg Game $ "  score: " ++ show (getScore gs i)
     writeMsg Game $ "player "++show (getWinner gs)++" wins!"
     return gs
     where
@@ -113,4 +108,4 @@ getWinner gs = head $ elemIndices maxScore scores
         maxScore = maximum scores
 
         scores :: [Score]
-        scores = map getScore $ playerStates gs
+        scores = map (getScore gs) $ getPlayerIDs gs
