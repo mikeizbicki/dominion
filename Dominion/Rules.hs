@@ -1,3 +1,6 @@
+module Dominion.Rules
+    where
+
 import Data.List
 import Control.Monad
 import Control.Monad.Random
@@ -64,6 +67,7 @@ cards =
             else Just $ ps
                 { buys = buys ps + 1
                 , money = money ps + 2
+                , actions = actions ps - 1
                 }
         , cardCost = 3
         } )
@@ -190,80 +194,12 @@ cardsInSupply gs c = case lookup c $ supply gs of
     Nothing -> 0
     Just i -> i
 
-initGameState :: StdGen -> Int -> GameState
-initGameState sg n = GameState
-    { playerStates = mkPlayerStates sg n
-    , supply = 
-        [ (copper,100)
-        , (estate,10)
-        , (village,10)
-        , (woodcutter,10)
-        ]
-    , currentPlayer = 0
-    }
-    where
-        mkPlayerStates sg 0 = []
-        mkPlayerStates sg i = initPlayerState sg1:mkPlayerStates sg2 (i-1)
-            where
-                (sg1,sg2) = split sg
---                 map resetTurn $ replicate n (initPlayerState sg)
-
 drawCardFromSupply :: CardID -> GameState -> GameState
 drawCardFromSupply c gs = gs { supply = map go $ supply gs }
     where
         go (c',i) = if c==c' && i>0
             then (c',i-1)
             else (c',i)
-
-----------------------------------------
-
-doTurn :: GameState -> IO GameState
-doTurn gs = do
-    putStrLn $ replicate 10 '='
-    putStrLn $ "active player: "++show(currentPlayer gs)
-    putStrLn $ "supply: " ++ show (supply gs)
-    putStrLn $ "hand: " ++ show (hand $ getCurrentPlayerState gs)
-    putStrLn $ "moves: "
-    gs <- go gs
-    gs <- updateCurrentPlayerState (return . resetTurn) gs
-    return $ gs { currentPlayer = (currentPlayer gs + 1) `mod` numPlayers gs }
-    where
-        go gs = case doAction gs action of
-            Nothing -> return gs
-            Just gs' -> do
-                putStrLn $ "  "++show action
-                go gs'
-            where
-                action = getAction gs
-
-isGameOver :: GameState -> Bool
-isGameOver gs = noprovince || empty3
-    where
-        noprovince = any go $ supply gs
-            where
-                go (c,i) = if c==province && i==0
-                    then True
-                    else False
-
-        empty3 = (sum $ map go $ supply gs) >= 3
-            where
-                go (_,0) = 1
-                go _     = 0
-
-runGame :: GameState -> IO ()
-runGame gs = do
-    go gs
-    putStrLn "==========================="
-    putStrLn "final results"
-    forM (playerStates gs) $ \ps -> do
-        putStrLn $ "  victory points: " ++ show (getVictoryPoints ps)
-    return ()
-    where
-        go gs = if isGameOver gs
-            then return ()
-            else do
-                gs' <- doTurn gs
-                go gs' 
 
 ----------------------------------------
 
@@ -297,24 +233,3 @@ putCardOnTable c ps = if c `elem` hand ps
         , played = c:played ps
         }
     else Nothing
-
-----------------------------------------
-
-getAction :: GameState -> Action
-getAction gs = case selectCard gs of
-    Just a -> Play a
-    Nothing -> go $ map (\a->(a,doAction gs a)) [Buy village,Buy woodcutter,Buy estate]
-        where
-            go :: [(Action,Maybe GameState)] -> Action
-            go ((a,Just _):xs) = a
-            go (_         :xs) = go xs
-            go []              = Stop
-
-
-selectCard :: GameState -> Maybe CardID
-selectCard gs = go $ hand $ getCurrentPlayerState gs
-    where
-        go (x:xs) = case idAction x gs of
-            Just ps' -> Just x
-            Nothing -> go xs
-        go [] = Nothing
