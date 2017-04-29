@@ -12,6 +12,7 @@ data MessageType
     = All
     | Game
     | Turn
+    | None
     deriving (Read,Show,Eq,Ord)
 
 newtype Sim a = Sim (RandT StdGen (Writer (D.DList (MessageType,String))) a)
@@ -35,8 +36,7 @@ runSim t (Sim m) = do
     where
         go []            = return ()
         go ((t',str):xs) = do
---             putStrLn str
-            if t'<t
+            if t'>=t
                 then putStrLn str
                 else return ()
             go xs

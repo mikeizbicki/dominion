@@ -97,7 +97,7 @@ tournament :: Int -> IO ()
 tournament n = do
     winners <- forM [1..n] $ \i -> do
         putStrLn $ "starting game "++show i
-        gs <- runSim All $ runGame defConfig
+        gs <- runSim None $ runGame defConfig
         return $ getWinner gs
     putStrLn $ "winners="++show winners
 
