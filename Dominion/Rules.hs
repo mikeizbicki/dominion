@@ -131,13 +131,7 @@ drawCard ps = case deck ps of
         }
 
 getAllCards :: PlayerState -> [CardID]
-getAllCards ps = deck ps ++ hand ps ++ discard ps
-
-getVictoryPoints :: PlayerState -> Int
-getVictoryPoints ps = go $ getAllCards ps
-    where
-        go [] = 0
-        go (x:xs) = idVPs x ps + go xs
+getAllCards ps = deck ps ++ hand ps ++ played ps ++ discard ps
 
 initPlayerState :: StdGen -> PlayerState
 initPlayerState stdgen = PlayerState
@@ -200,6 +194,25 @@ drawCardFromSupply c gs = gs { supply = map go $ supply gs }
         go (c',i) = if c==c' && i>0
             then (c',i-1)
             else (c',i)
+
+----------------------------------------
+
+data Score = Score
+    { scoreVPs :: Int
+    , scoreCards :: Int
+    }
+    deriving (Read,Show,Eq)
+
+instance Ord Score where
+    compare s1 s2 = case compare (scoreVPs s1) (scoreVPs s2) of
+        EQ -> compare (scoreCards s1) (scoreCards s2)
+        x  -> x
+
+getScore :: PlayerState -> Score
+getScore ps = Score
+    { scoreVPs = sum $ map (flip idVPs ps) $ getAllCards ps
+    , scoreCards = length $ getAllCards ps
+    }
 
 ----------------------------------------
 

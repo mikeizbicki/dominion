@@ -1,22 +1,23 @@
-module Engine
+module Engine.Simulator
     where
 
 import Data.List
 import Control.Monad
-import Control.Monad.Random
+import Control.Monad.Random (StdGen,split)
 
 import Dominion.Rules
 import Dominion.Strategy
+import Engine.Monad
 
 ----------------------------------------
 
-doTurn :: Config -> GameState -> IO GameState
+doTurn :: Config -> GameState -> Sim GameState
 doTurn cfg gs = do
-    putStrLn $ replicate 10 '='
-    putStrLn $ "active player: "++show(currentPlayer gs)
-    putStrLn $ "supply: " ++ show (supply gs)
-    putStrLn $ "hand: " ++ show (hand $ getCurrentPlayerState gs)
-    putStrLn $ "moves: "
+    writeMsg Turn $ replicate 10 '='
+    writeMsg Turn $ "active player: "++show(currentPlayer gs)
+    writeMsg Turn $ "supply: " ++ show (supply gs)
+    writeMsg Turn $ "hand: " ++ show (hand $ getCurrentPlayerState gs)
+    writeMsg Turn $ "moves: "
     gs <- go gs
     gs <- updateCurrentPlayerState (return . resetTurn) gs
     return $ gs { currentPlayer = (currentPlayer gs + 1) `mod` numPlayers gs }
@@ -24,7 +25,7 @@ doTurn cfg gs = do
         go gs = case doAction gs action of
             Nothing -> return gs
             Just gs' -> do
-                putStrLn $ "  "++show action
+                writeMsg Turn $ "  "++show action
                 go gs'
             where
                 action = getCurrentPlayerStrategy cfg gs gs
@@ -78,20 +79,38 @@ mkGameState sg cfg = GameState
             where
                 (sg1,sg2) = split sg
 
-runGame :: Config -> IO ()
+runGame :: Config -> Sim GameState
 runGame cfg = do
-    sg <- newStdGen
+    sg <- mkStdGen
+--     let sg = mkStdGen 0
     let gs = mkGameState sg cfg
     gs <- go gs
-    putStrLn "==========================="
-    putStrLn "final results"
+    writeMsg Game "==========================="
+    writeMsg Game "final results"
     forM (playerStates gs) $ \ps -> do
---         putStrLn $ "  cards: "++show (getAllCards ps)
-        putStrLn $ "  victory points: " ++ show (getVictoryPoints ps)
-    return ()
+        writeMsg Game $ "  score: " ++ show (getScore ps)
+    writeMsg Game $ "player "++show (getWinner gs)++" wins!"
+    return gs
     where
         go gs = if isGameOver gs
             then return gs
             else do
                 gs' <- doTurn cfg gs
                 go gs' 
+
+tournament :: Int -> IO ()
+tournament n = do
+    winners <- forM [1..n] $ \i -> do
+        putStrLn $ "starting game "++show i
+        gs <- runSim Game $ runGame defConfig
+        return $ getWinner gs
+    putStrLn $ "winners="++show winners
+
+getWinner :: GameState -> Int
+getWinner gs = head $ elemIndices maxScore scores
+    where
+        maxScore :: Score
+        maxScore = maximum scores
+
+        scores :: [Score]
+        scores = map getScore $ playerStates gs
