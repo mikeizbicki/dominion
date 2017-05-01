@@ -4,6 +4,8 @@ module Engine.Simulator
 import Data.List
 import Control.Monad
 import Control.Monad.Random (StdGen,split)
+import Control.Monad.Reader
+import System.Random.Shuffle
 
 import Dominion.Rules
 import Dominion.Strategy
@@ -28,10 +30,8 @@ doTurn cfg gs = do
                 writeMsg Turn $ "  "++show action
                 go gs'
             where
-                action = getCurrentPlayerStrategy cfg gs gs
-
-getCurrentPlayerStrategy :: Config -> GameState -> GameState -> Action
-getCurrentPlayerStrategy cfg gs = playerStrategies cfg !! currentPlayer gs
+                action :: Action
+                action = strategyAction (playerStrategies cfg !! currentPlayer gs) gs
 
 isGameOver :: GameState -> Bool
 isGameOver gs = noprovince || empty3
@@ -48,16 +48,7 @@ isGameOver gs = noprovince || empty3
                 go _     = 0
 
 data Config = Config
-    { playerStrategies :: [GameState -> Action]
-    }
-
-defConfig :: Config
-defConfig = Config
-    { playerStrategies = 
-        [ buyVillage
-        , buyWoodcutter
-        , buyVPs 
-        ]
+    { playerStrategies :: [Strategy]
     }
 
 mkGameState :: StdGen -> Config -> GameState
@@ -93,13 +84,29 @@ runGame cfg = do
                 gs' <- doTurn cfg gs
                 go gs' 
 
+defConfig :: Config
+defConfig = Config
+    { playerStrategies = 
+        [ bigMoney
+        , bigWoodcutter
+        , miniEngine
+        ]
+    }
+
 tournament :: Int -> IO ()
 tournament n = do
+    let strats = [bigMoney, bigWoodcutter, miniEngine,bigSmithy]
     winners <- forM [1..n] $ \i -> do
         putStrLn $ "starting game "++show i
-        gs <- runSim None $ runGame defConfig
-        return $ getWinner gs
-    putStrLn $ "winners="++show winners
+        strats' <- shuffleM strats
+        gs <- runSim None $ runGame $ Config strats'
+        return $ strats' !! getWinner gs
+
+    putStrLn $ "score:"
+    forM strats $ \s -> do
+        putStrLn $ "  "++show s++": "++ show (length $ filter (==s) winners)
+
+    return ()
 
 getWinner :: GameState -> Int
 getWinner gs = head $ elemIndices maxScore scores

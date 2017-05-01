@@ -165,7 +165,7 @@ actionAllPlayersDrawCards n gs = Just $ go n gs
         go n gs = go (n-1) $ gs { playerStates = map drawCard $ playerStates gs }
 
 actionAddActions :: Int -> GameState -> Maybe GameState
-actionAddActions n gs = actionCost (-n) gs
+actionAddActions n = updateCurrentPlayerState $ \ps -> Just $ ps { actions = actions ps + n }
 
 actionCost :: Int -> GameState -> Maybe GameState
 actionCost n = updateCurrentPlayerState $ \ps -> if actions ps < n
@@ -199,14 +199,16 @@ data PlayerState = PlayerState
 
 drawCard :: PlayerState -> PlayerState
 drawCard ps = case deck ps of
-    [] -> drawCard $ ps
-        { deck = deck'
-        , discard = []
-        , stdgen = sg2
-        }
-        where 
-            (sg1,sg2) = split $ stdgen ps
-            deck' = shuffle' (discard ps) (length $ discard ps) sg1
+    [] -> case discard ps of 
+        [] -> ps
+        _  -> drawCard $ ps
+            { deck = deck'
+            , discard = []
+            , stdgen = sg2
+            }
+            where 
+                (sg1,sg2) = split $ stdgen ps
+                deck' = shuffle' (discard ps) (length $ discard ps) sg1
     (x:xs) -> ps
         { deck = tail $ deck ps
         , hand = head (deck ps) : hand ps

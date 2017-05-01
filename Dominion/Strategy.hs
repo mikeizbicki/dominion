@@ -8,46 +8,93 @@ import Dominion.Rules
 
 ----------------------------------------
 
-buyVPs :: GameState -> Action
-buyVPs gs 
-    = playFirst gs [copper,silver,gold,village,woodcutter] 
-   <> buyFirst gs [province,duchy,estate,gold,silver,copper]
+data Strategy = Strategy
+    { strategyName :: String
+    , strategyAction :: GameState -> Action
+    }
 
-buyVillage :: GameState -> Action
-buyVillage gs 
-    = playMoney gs
-   <> tryAction gs (Buy village)
-   <> tryAction gs (Buy woodcutter)
-   <> buyBestVP gs
+instance Show Strategy where
+    show = strategyName
 
-buyWoodcutter :: GameState -> Action
-buyWoodcutter gs 
-    = playMoney gs
-   <> tryAction gs (Buy woodcutter)
-   <> tryAction gs (Buy village)
-   <> buyBestVP gs
+instance Eq Strategy where
+    s1==s2 = strategyName s1==strategyName s2
+
+bigMoney :: Strategy
+bigMoney = Strategy
+    { strategyName = "big money"
+    , strategyAction 
+        = playMoney
+       <> buyList [province,gold,silver]
+    }
+
+bigWoodcutter :: Strategy
+bigWoodcutter = Strategy
+    { strategyName = "BM woodcutter"
+    , strategyAction
+        = playMoney 
+       <> play woodcutter 
+       <> buyUpTo 1 woodcutter 
+       <> buyList [province,gold,silver]
+    }
+
+miniEngine :: Strategy
+miniEngine = Strategy
+    { strategyName = "mini engine"
+    , strategyAction 
+        = playMoney 
+       <> play village
+       <> play festival
+       <> play smithy
+       <> play woodcutter
+       <> buyList [province,gold,smithy]
+       <> buyUpTo 1 village
+       <> buyUpTo 1 woodcutter
+       <> buyList [village,silver]
+    }
+
+bigSmithy :: Strategy
+bigSmithy = Strategy
+    { strategyName = "big smithy"
+    , strategyAction 
+        = playMoney 
+       <> play village
+       <> play festival
+       <> play smithy
+       <> buyList [province,gold,smithy,silver]
+    }
 
 ----------------------------------------
 
-tryAction :: GameState -> Action -> Action
-tryAction gs a = case doAction gs a of
+try :: Action -> GameState -> Action
+try a gs = case doAction gs a of
     Nothing -> Pass
     Just _  -> a
 
-doFirst :: GameState -> [Action] -> Action
-doFirst gs = mconcat . map (tryAction gs)
+buy :: Card -> GameState -> Action
+buy c = try (Buy c)
 
-buyFirst :: GameState -> [Card] -> Action
-buyFirst gs = doFirst gs . map Buy
+play :: Card -> GameState -> Action
+play c = try (Play c)
 
-buyBestMoney :: GameState -> Action
-buyBestMoney gs = buyFirst gs [gold,silver,copper]
+tryList :: [Action] -> GameState -> Action
+tryList = fmap mconcat . mapM try
 
-buyBestVP :: GameState -> Action
-buyBestVP gs = buyFirst gs [province,duchy,estate]
+buyList :: [Card] -> GameState -> Action
+buyList = tryList . map Buy
 
-playFirst :: GameState -> [Card] -> Action
-playFirst gs = doFirst gs . map Play
+playList :: [Card] -> GameState -> Action
+playList = tryList . map Play
 
 playMoney :: GameState -> Action
-playMoney gs = playFirst gs [gold,silver,copper]
+playMoney = playList [gold,silver,copper]
+
+buyUpTo :: Int -> Card -> GameState -> Action
+buyUpTo n c gs = if n < numCards c (getCurrentPlayerState gs)
+    then Pass
+    else buy c gs
+
+numCards :: Card -> PlayerState -> Int
+numCards c ps = sum $ map (\c' -> if c==c' then 1 else 0) $ getAllCards ps
+
+hasCard :: Card -> PlayerState -> Bool
+hasCard c ps = or $ map (==c) $ getAllCards ps
