@@ -133,7 +133,7 @@ buy :: Card -> GameState -> Action
 buy c = try (Buy c)
 
 play :: Card -> GameState -> Action
-play c = try (Play c)
+play c = try (Play c [])
 
 tryList :: [Action] -> GameState -> Action
 tryList = fmap mconcat . mapM try
@@ -142,7 +142,7 @@ buyList :: [Card] -> GameState -> Action
 buyList = tryList . map Buy
 
 playList :: [Card] -> GameState -> Action
-playList = tryList . map Play
+playList = tryList . map (\c -> Play c [])
 
 playMoney :: GameState -> Action
 playMoney = playList [gold,silver,copper]

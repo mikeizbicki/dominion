@@ -21,7 +21,7 @@ import Debug.Trace
 -- The moat's reaction ability is hardcoded in the `doAction` function rather than appearing as a property here.
 data Card = Card
     { cardVPs       :: PlayerState -> Int
-    , cardAction    :: GameState -> Maybe GameState
+    , cardAction    :: [Card] -> GameState -> Maybe GameState
     , cardAttack    :: Maybe (PlayerID -> GameState -> GameState)
     , cardCost      :: Int
     , cardName      :: String
@@ -50,7 +50,7 @@ basicCardType = CardType False False False False False
 basicCard :: Card
 basicCard = Card
     { cardVPs = \_ -> 0
-    , cardAction = \ps -> Just ps
+    , cardAction = \_ gs -> Just gs
     , cardAttack = Nothing
     , cardCost = error "card cost undefined"
     , cardName = error "card name undefined"
@@ -219,8 +219,8 @@ moat = basicCard
 -- I'm not sure if that's because it improves the opponents' decks cycling or if there's a bug somewhere.
 bandit :: Card
 bandit = basicCard
-    { cardAction = \gs -> do
-        gs <- actionCost 1 gs
+    { cardAction = \cs gs -> do
+        gs <- actionCost 1 cs gs
         gs <- drawCardFromSupply gold gs
         updateCurrentPlayerState (\ps -> Just $ ps { discard = gold:discard ps }) gs
     , cardAttack = Just $ \i gs -> gs
@@ -241,8 +241,8 @@ bandit = basicCard
 
 bureaucrat :: Card
 bureaucrat = basicCard
-    { cardAction = \gs -> do 
-        gs <- actionCost 1 gs
+    { cardAction = \cs gs -> do 
+        gs <- actionCost 1 cs gs
         gs <- drawCardFromSupply silver gs
         updateCurrentPlayerState (\ps -> Just $ ps { deck = silver:deck ps }) gs
     , cardAttack = Just $ \i gs -> gs 
@@ -313,38 +313,38 @@ witch = basicCard
 
 --------------------
 
-actionDrawCards :: Int -> GameState -> Maybe GameState
-actionDrawCards n gs = go n $ Just gs
+actionDrawCards :: Int -> [Card] -> GameState -> Maybe GameState
+actionDrawCards n _ gs = go n $ Just gs
     where
         go 0 mgs = mgs
         go n mgs = case mgs of 
             Nothing -> Nothing
             Just gs -> go (n-1) $ updateCurrentPlayerState (\ps -> Just $ drawCard ps) gs
 
-actionAllPlayersDrawCards :: Int -> GameState -> Maybe GameState
-actionAllPlayersDrawCards n gs = Just $ go n gs
+actionAllPlayersDrawCards :: Int -> [Card] -> GameState -> Maybe GameState
+actionAllPlayersDrawCards n _ gs = Just $ go n gs
     where
         go 0 gs = gs
         go n gs = go (n-1) $ gs { playerStates = map drawCard $ playerStates gs }
 
-actionAddActions :: Int -> GameState -> Maybe GameState
-actionAddActions n = updateCurrentPlayerState $ \ps -> Just $ ps { actions = actions ps + n }
+actionAddActions :: Int -> [Card] -> GameState -> Maybe GameState
+actionAddActions n _ = updateCurrentPlayerState $ \ps -> Just $ ps { actions = actions ps + n }
 
-actionCost :: Int -> GameState -> Maybe GameState
-actionCost n = updateCurrentPlayerState $ \ps -> if actions ps < n
+actionCost :: Int -> [Card] -> GameState -> Maybe GameState
+actionCost n _ = updateCurrentPlayerState $ \ps -> if actions ps < n
     then Nothing
     else Just $ ps { actions = actions ps - n }
 
-actionAddBuys :: Int -> GameState -> Maybe GameState
-actionAddBuys n = updateCurrentPlayerState $ \ps -> if actions ps < n
+actionAddBuys :: Int -> [Card] -> GameState -> Maybe GameState
+actionAddBuys n _ = updateCurrentPlayerState $ \ps -> if actions ps < n
     then Nothing
     else Just $ ps { buys = buys ps + n }
 
-actionAddMoney :: Int -> GameState -> Maybe GameState
-actionAddMoney n = updateCurrentPlayerState $ \ps -> Just $ ps {money = money ps + n }
+actionAddMoney :: Int -> [Card] -> GameState -> Maybe GameState
+actionAddMoney n _ = updateCurrentPlayerState $ \ps -> Just $ ps {money = money ps + n }
 
-actionNone :: GameState -> Maybe GameState
-actionNone _ = Nothing
+actionNone :: [Card] -> GameState -> Maybe GameState
+actionNone _ _ = Nothing
 
 ----------------------------------------
 
@@ -496,7 +496,7 @@ getScore gs n = Score
 ----------------------------------------
 
 data Action
-    = Play Card
+    = Play Card [Card]
     | Buy Card
     | Pass
     deriving (Show)
@@ -508,9 +508,9 @@ instance Monoid Action where
 
 doAction :: GameState -> Action -> Maybe GameState
 doAction gs Pass = Nothing
-doAction gs (Play c) = do
+doAction gs (Play c cs) = do
     gs <- updateCurrentPlayerState (putCardOnTable c) gs
-    gs <- cardAction c gs
+    gs <- cardAction c cs gs
     gs <- Just $ foldr doReaction gs $ getNoncurrentPlayerIDs gs
     return gs
     where
