@@ -16,7 +16,7 @@ import Engine.Monad
 doTurn :: Config -> GameState -> Sim GameState
 doTurn cfg gs = do
     writeMsg Turn $ replicate 10 '='
-    writeMsg Turn $ "active player: "++show(currentPlayer gs)
+    writeMsg Turn $ "active player: "++show (currentPlayer gs) ++ " ("++show (playerStrategies cfg!!currentPlayer gs)++")"
     writeMsg Turn $ "supply: " ++ show (supply gs)
     writeMsg Turn $ "hand: " ++ show (hand $ getCurrentPlayerState gs)
     writeMsg Turn $ "moves: "
@@ -95,7 +95,9 @@ defConfig = Config
 
 tournament :: Int -> IO ()
 tournament n = do
-    let strats = [bigMoney, bigWoodcutter, miniEngine,bigSmithy]
+--     let strats = [{-bigMoney, bigWoodcutter, -}miniEngine,bigSmithy,bigMoat]
+--     let strats = [moatEngine,miniEngine,bigSmithy,bigMoat]
+    let strats = [miniEngine,moatEngine,bigMilitia]
     winners <- forM [1..n] $ \i -> do
         putStrLn $ "starting game "++show i
         strats' <- shuffleM strats

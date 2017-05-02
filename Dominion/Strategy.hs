@@ -19,6 +19,9 @@ instance Show Strategy where
 instance Eq Strategy where
     s1==s2 = strategyName s1==strategyName s2
 
+cpStrategy :: Strategy -> Strategy
+cpStrategy s = s { strategyName = strategyName s ++ "X" }
+
 bigMoney :: Strategy
 bigMoney = Strategy
     { strategyName = "big money"
@@ -33,8 +36,42 @@ bigWoodcutter = Strategy
     , strategyAction
         = playMoney 
        <> play woodcutter 
+       <> buyList [province,gold]
        <> buyUpTo 1 woodcutter 
-       <> buyList [province,gold,silver]
+       <> buy silver
+    }
+
+bigMilitia :: Strategy
+bigMilitia = Strategy
+    { strategyName = "BM militia"
+    , strategyAction
+        = playMoney 
+       <> play militia 
+       <> buyList [province,gold]
+       <> buyUpTo 3 militia 
+       <> buy silver
+    }
+
+bigWitch :: Strategy
+bigWitch = Strategy
+    { strategyName = "BM witch"
+    , strategyAction
+        = playMoney 
+       <> play witch 
+       <> buyList [province,gold]
+       <> buyUpTo 3 witch 
+       <> buy silver
+    }
+
+banditti :: Strategy
+banditti = Strategy
+    { strategyName = "BM bandits"
+    , strategyAction
+        = playMoney
+       <> play bandit
+       <> buyList [province,gold]
+       <> buyUpTo 3 bandit
+       <> buy silver
     }
 
 miniEngine :: Strategy
@@ -42,13 +79,26 @@ miniEngine = Strategy
     { strategyName = "mini engine"
     , strategyAction 
         = playMoney 
-       <> play village
-       <> play festival
-       <> play smithy
-       <> play woodcutter
-       <> buyList [province,gold,smithy]
+       <> playList [village,festival,witch,smithy,moat,woodcutter]
+       <> buyList [province,gold]
+       <> buyUpTo 2 witch
+       <> buyList [smithy]
        <> buyUpTo 1 village
        <> buyUpTo 1 woodcutter
+       <> buyList [village,silver]
+    }
+
+moatEngine :: Strategy
+moatEngine = Strategy
+    { strategyName = "moat engine"
+    , strategyAction 
+        = playMoney 
+       <> playList [village,festival,witch,smithy,moat,woodcutter]
+       <> buyList [province,gold]
+       <> buyUpTo 1 witch
+       <> buyList [smithy]
+--        <> buyUpTo 1 village
+       <> buyUpTo 3 moat
        <> buyList [village,silver]
     }
 
@@ -57,10 +107,19 @@ bigSmithy = Strategy
     { strategyName = "big smithy"
     , strategyAction 
         = playMoney 
-       <> play village
-       <> play festival
        <> play smithy
        <> buyList [province,gold,smithy,silver]
+    }
+
+bigMoat :: Strategy
+bigMoat = Strategy
+    { strategyName = "big moat"
+    , strategyAction 
+        = playMoney 
+       <> play moat
+       <> buyList [province,gold]
+       <> buyUpTo 2 moat
+       <> buyList [silver,moat]
     }
 
 ----------------------------------------
