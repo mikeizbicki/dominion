@@ -42,36 +42,6 @@ data CardType = CardType
     , victory   :: Bool
     }
 
---------------------
-
-actionDrawCards :: Int -> [Card] -> GameState -> Maybe GameState
-actionDrawCards n _ gs = go n $ Just gs
-    where
-        go 0 mgs = mgs
-        go n mgs = case mgs of 
-            Nothing -> Nothing
-            Just gs -> go (n-1) $ return $ updatePlayerState CurrentPlayer drawCard gs
-
-actionAllPlayersDrawCards :: Int -> [Card] -> GameState -> Maybe GameState
-actionAllPlayersDrawCards n _ gs = Just $ go n gs
-    where
-        go 0 gs = gs
-        go n gs = go (n-1) $ gs { playerStates = map drawCard $ playerStates gs }
-
-actionAddActions :: Int -> [Card] -> GameState -> Maybe GameState
-actionAddActions n _ = updatePlayerStateM CurrentPlayer $ \ps -> Just $ ps { actions = actions ps + n }
-
-actionAddBuys :: Int -> [Card] -> GameState -> Maybe GameState
-actionAddBuys n _ = updatePlayerStateM CurrentPlayer $ \ps -> if actions ps < n
-    then Nothing
-    else Just $ ps { buys = buys ps + n }
-
-actionAddMoney :: Int -> [Card] -> GameState -> Maybe GameState
-actionAddMoney n _ = updatePlayerStateM CurrentPlayer $ \ps -> Just $ ps {money = money ps + n }
-
-actionNone :: [Card] -> GameState -> Maybe GameState
-actionNone _ _ = Nothing
-
 ----------------------------------------
 
 data PlayerState = PlayerState
@@ -86,6 +56,9 @@ data PlayerState = PlayerState
     , stdgen            :: StdGen 
     }
     deriving (Show)
+
+getAllCards :: PlayerState -> [Card]
+getAllCards ps = deck ps ++ hand ps ++ played ps ++ discard ps
 
 getNextCards :: Int -> PlayerState -> ([Card],PlayerState)
 getNextCards 0 ps = ([],ps)
@@ -104,16 +77,13 @@ getNextCards n ps = case deck ps of
         where
             (cs',ps') = getNextCards (n-1) $ ps { deck = cs }
 
-drawCard :: PlayerState -> PlayerState
-drawCard ps = ps' { hand = cs ++ hand ps' }
+drawCards :: Int -> PlayerState -> PlayerState
+drawCards n ps = ps' { hand = cs ++ hand ps' }
     where
-        (cs,ps') = getNextCards 1 ps
+        (cs,ps') = getNextCards n ps
 
-getAllCards :: PlayerState -> [Card]
-getAllCards ps = deck ps ++ hand ps ++ played ps ++ discard ps
-
-resetTurn :: PlayerState -> PlayerState
-resetTurn ps = drawCard $ drawCard $ drawCard $ drawCard $ drawCard $ PlayerState
+cleanUpPhase :: PlayerState -> PlayerState
+cleanUpPhase ps = drawCards 5 $ PlayerState
     { deck = deck ps
     , hand = []
     , played = []
@@ -202,6 +172,15 @@ cardsInSupply :: GameState -> Card -> Int
 cardsInSupply gs c = case lookup c $ supply gs of
     Nothing -> 0
     Just i -> i
+
+getWinner :: GameState -> PlayerID
+getWinner gs = head $ elemIndices maxScore scores
+    where
+        maxScore :: Score
+        maxScore = maximum scores
+
+        scores :: [Score]
+        scores = map (getScore gs) $ getPlayerIDs gs
 
 ----------------------------------------
 
@@ -380,5 +359,3 @@ putCardOnTable c ps = if c `elem` hand ps
         , played = c:played ps
         }
     else Nothing
-
-

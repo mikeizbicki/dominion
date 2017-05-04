@@ -8,6 +8,8 @@ import Control.Monad.Reader
 import Numeric
 import System.Random.Shuffle
 
+import Data.IORef
+
 import Dominion.Cards
 import Dominion.Rules
 import Dominion.Setup
@@ -30,7 +32,7 @@ doTurn cfg gs = do
 --         $ writeMsg None $ " vpDensity: " ++ showFFloat (Just 2) (vpDensity gs) "" 
 --                  ++ "; treasureDensity: "++ showFFloat (Just 2) (treasureDensity gs) ""
     gs <- go gs
-    gs <- return $ updatePlayerState CurrentPlayer resetTurn gs
+    gs <- return $ updatePlayerState CurrentPlayer cleanUpPhase gs
     return $ gs 
         { currentPlayer = (currentPlayer gs + 1) `mod` numPlayers gs 
         }
@@ -122,11 +124,66 @@ tournament n = do
 
     return ()
 
-getWinner :: GameState -> Int
-getWinner gs = head $ elemIndices maxScore scores
-    where
-        maxScore :: Score
-        maxScore = maximum scores
 
-        scores :: [Score]
-        scores = map (getScore gs) $ getPlayerIDs gs
+elo :: Int -> [Strategy] -> IO ()
+elo n players = do
+
+    eloref <- newIORef $ Elo []
+
+    forM [1..n] $ \i -> do
+        putStrLn $ "starting game "++show i
+        players' <- fmap (take 2) $ shuffleM players
+        gs <- runSim None $ runGame $ Config players'
+        let winnerid = getWinner gs
+            loserid  = (winnerid+1)`mod`2
+            winner = players' !! winnerid
+            loser  = players' !! loserid
+
+        modifyIORef eloref (updateElo (winner,1) (loser,0))
+
+        putStrLn "Elo ratings:"
+        (Elo xs) <- readIORef eloref
+        forM xs $ \(p,r) -> 
+            putStrLn $ "  "++show p++": "++showFFloat (Just 2) r ""
+--     putStrLn $ "elo: " ++ show elo
+--     forM defPlayers $ \s -> do
+--         putStrLn $ "  "++show s++": "++ show (length $ filter (==s) winners)
+
+    return ()
+
+data Elo = Elo [(Strategy,Double)]
+    deriving (Show)
+
+updateElo :: (Strategy,Double) -> (Strategy,Double) -> Elo -> Elo
+updateElo (p1,s1) (p2,s2) (Elo xs) = Elo $ map go xs2
+    where
+        xs1 = case lookup p1 xs of
+            Nothing -> (p1,r1):xs
+            Just _  -> xs
+
+        xs2 = case lookup p2 xs1 of
+            Nothing -> (p2,r1):xs1
+            Just _  -> xs1
+
+        go (p,r) = if p==p1
+            then (p,r1')
+            else if p==p2
+                then (p, r2')
+                else (p, r)
+
+        r1 = case lookup p1 xs of
+            Nothing -> 0
+            Just r  -> r
+        
+        r2 = case lookup p2 xs of 
+            Nothing -> 0
+            Just r  -> r
+
+        k = 32
+        a = 400
+
+        e1 = 1/(1+exp((r2-r1)/a))
+        e2 = 1/(1+exp((r1-r2)/a))
+
+        r1' = r1 + k*(s1-e1)
+        r2' = r2 + k*(s2-e2)

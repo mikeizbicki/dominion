@@ -196,6 +196,28 @@ bigSmithy = Strategy
        <> buyList [silver]
     }
 
+bigSmithy2 :: Strategy
+bigSmithy2 = Strategy
+    { strategyName = "big smithy2"
+    , strategyAction 
+        = playMoney 
+       <> play smithy
+       <> buyList [province,gold]
+       <> buyUpTo 2 smithy
+       <> buyList [silver]
+    }
+
+bigSmithy3 :: Strategy
+bigSmithy3 = Strategy
+    { strategyName = "big smithy3"
+    , strategyAction 
+        = playMoney 
+       <> play smithy
+       <> buyList [province,gold]
+       <> buyUpTo 3 smithy
+       <> buyList [silver]
+    }
+
 bigMoat :: Strategy
 bigMoat = Strategy
     { strategyName = "big moat"

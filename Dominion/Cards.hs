@@ -399,3 +399,28 @@ witch = defCard
     , cardName = "witch"
     , cardType = defCardType { action = True, attack = True }
     }
+
+--------------------
+
+actionDrawCards :: Int -> [Card] -> GameState -> Maybe GameState
+actionDrawCards n _ gs = return $ updatePlayerState CurrentPlayer (drawCards n) gs
+
+actionAllPlayersDrawCards :: Int -> [Card] -> GameState -> Maybe GameState
+actionAllPlayersDrawCards n _ gs = return $ gs { playerStates = map (drawCards n) $ playerStates gs }
+
+actionAddActions :: Int -> [Card] -> GameState -> Maybe GameState
+actionAddActions n _ gs = return $ updatePlayerState CurrentPlayer addActions gs
+    where
+        addActions ps = ps { actions = actions ps + n }
+
+actionAddBuys :: Int -> [Card] -> GameState -> Maybe GameState
+actionAddBuys n _ = updatePlayerStateM CurrentPlayer $ \ps -> if actions ps < n
+    then Nothing
+    else Just $ ps { buys = buys ps + n }
+
+actionAddMoney :: Int -> [Card] -> GameState -> Maybe GameState
+actionAddMoney n _ = updatePlayerStateM CurrentPlayer $ \ps -> Just $ ps {money = money ps + n }
+
+actionNone :: [Card] -> GameState -> Maybe GameState
+actionNone _ _ = Nothing
+
