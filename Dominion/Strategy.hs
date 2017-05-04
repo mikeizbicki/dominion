@@ -4,6 +4,7 @@ module Dominion.Strategy
 import Data.Monoid
 import Debug.Trace
 
+import Dominion.Cards
 import Dominion.Rules
 
 ----------------------------------------
@@ -11,6 +12,7 @@ import Dominion.Rules
 data Strategy = Strategy
     { strategyName :: String
     , strategyAction :: GameState -> Action
+--     , strategyBuy :: GameState -> [Card]
     }
 
 instance Show Strategy where
@@ -29,6 +31,86 @@ bigMoney = Strategy
         = playMoney
        <> buyList [province,gold,silver]
     }
+--     , strategyBuy
+--         = tryToBuy [province]
+--     }
+--  
+-- data B 
+--     = B [Card]
+--     | NoB
+-- 
+-- tryToBuy :: GameState -> [Card] -> B
+-- tryToBuy gs xs = if canBuyAllCards gs xs
+--     then B xs
+--     else NoB
+--     where
+--         canBuyAllCards gs []     = True
+--         canBuyAllCards gs (x:xs) = case doAction gs (Buy x) of
+--             Nothing  -> False
+--             Just gs' -> canBuyAllCards gs' xs
+
+
+bigMine :: Strategy
+bigMine = Strategy
+    { strategyName = "bm mine"
+    , strategyAction 
+        = try (Play mine [silver])
+       <> try (Play mine [copper])
+       <> playMoney
+       <> buyList [province,gold]
+       <> buyUpTo 2 mine
+       <> buy silver
+    }
+
+bigCellar :: Strategy
+bigCellar = Strategy
+    { strategyName = "bm cellar"
+    , strategyAction
+        = playCellar
+       <> playMoney
+       <> buyList [province,gold,silver]
+       <> buyUpTo 2 cellar
+    }
+    where
+        playCellar gs = try (Play cellar $ filter isBadCard $ hand ps) gs
+            where
+                isBadCard c = (c==copper) || (not $ treasure $ cardType c)
+                ps = getCurrentPlayerState gs
+
+bigChapel :: Strategy
+bigChapel = Strategy
+    { strategyName = "bm chapel"
+    , strategyAction
+        = playChapel
+       <> playMoney
+       <> buyList [province,gold,silver]
+       <> buyUpTo 3 chapel
+    }
+    where
+        playChapel gs = flip try gs $ Play chapel $ go (totalMoney $ hand ps) [] $ hand ps
+            where
+                ps = getCurrentPlayerState gs
+
+                go n ret []     = ret
+                go n ret (x:xs) = if n==8 || n==6 || n==3
+                    then ret
+                    else go n' ret' xs
+                    where
+                        (n',ret') = if x==copper
+                            then (n-1,x:ret)
+                            else if x==estate || x==chapel
+                                then (n,x:ret)
+                                else (n,ret)
+
+        totalMoney :: [Card] -> Int
+        totalMoney [] = 0
+        totalMoney (x:xs) = if x==copper
+            then totalMoney xs+1
+            else if x==silver
+                then totalMoney xs+2
+                else if x==gold
+                    then totalMoney xs+3
+                    else totalMoney xs
 
 bigWoodcutter :: Strategy
 bigWoodcutter = Strategy
@@ -82,10 +164,11 @@ miniEngine = Strategy
        <> playList [village,festival,witch,smithy,moat,woodcutter]
        <> buyList [province,gold]
        <> buyUpTo 2 witch
-       <> buyList [smithy]
+       <> buyUpTo 2 smithy
        <> buyUpTo 1 village
-       <> buyUpTo 1 woodcutter
-       <> buyList [village,silver]
+       <> buyUpTo 2 silver
+       <> buyUpTo 1 village
+       <> buyList [smithy,silver,cellar]
     }
 
 moatEngine :: Strategy
@@ -108,7 +191,9 @@ bigSmithy = Strategy
     , strategyAction 
         = playMoney 
        <> play smithy
-       <> buyList [province,gold,smithy,silver]
+       <> buyList [province,gold]
+       <> buyUpTo 1 smithy
+       <> buyList [silver]
     }
 
 bigMoat :: Strategy
