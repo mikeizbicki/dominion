@@ -91,9 +91,10 @@ gardens = defCard
 
 cellar :: Card
 cellar = defCard
-    { cardAction = do
-        actionAddActions 1
-        actionDiscardCards
+    { cardAction = \cs gs -> do
+        gs <- actionAddActions 1 cs gs
+        gs <- actionDiscardCards cs gs
+        return gs
     , cardCost = 2
     , cardName = "cellar"
     , cardType = defCardType { action = True }
@@ -116,8 +117,7 @@ cellar = defCard
 
 chapel :: Card
 chapel = defCard
-    { cardAction = do
-        actionTrashCards
+    { cardAction = actionTrashCards
     , cardCost = 2
     , cardName = "chapel"
     , cardType = defCardType { action = True }
@@ -134,10 +134,11 @@ chapel = defCard
 
 harbinger :: Card
 harbinger = defCard
-    { cardAction = do
-        actionDrawCards 1
-        actionAddActions 1
-        actionDiscardToDeck
+    { cardAction = \cs gs -> do
+        gs <- actionDrawCards 1 cs gs
+        gs <- actionAddActions 1 cs gs
+        gs <- actionDiscardToDeck cs gs
+        return gs
     , cardCost = 3
     , cardName = "harbinger"
     , cardType = defCardType { action = True }
@@ -157,9 +158,10 @@ harbinger = defCard
 
 vassal :: Card
 vassal = defCard
-    { cardAction = do
-        actionAddMoney 2
-        actionPlayTopCard
+    { cardAction = \cs gs -> do
+        gs <- actionAddMoney 2 cs gs
+        gs <- actionPlayTopCard cs gs
+        return gs
     , cardCost = 3
     , cardName = "vassal"
     , cardType = defCardType { action = True }
@@ -174,18 +176,9 @@ vassal = defCard
                         else Just $ ps' { discard = c : discard ps' }
                     _         -> Nothing
 
-throneRoom :: Card
-throneRoom = defCard
-    { cardAction = actionNone
-    , cardCost = 4
-    , cardName = "throne room"
-    , cardType = defCardType { action = True }
-    }
-
 workshop :: Card
 workshop = defCard
-    { cardAction = do
-        actionGainCardUpTo 4
+    { cardAction = actionGainCardUpTo 4
     , cardCost = 3
     , cardName = "workshop"
     , cardType = defCardType { action = True }
@@ -202,9 +195,10 @@ workshop = defCard
 
 village :: Card
 village = defCard
-    { cardAction = do
-        actionDrawCards 1
-        actionAddActions 2
+    { cardAction = \cs gs -> do
+        gs <- actionDrawCards 1 cs gs
+        gs <- actionAddActions 2 cs gs
+        return gs
     , cardCost = 3
     , cardName = "village"
     , cardType = defCardType { action = True }
@@ -212,19 +206,19 @@ village = defCard
 
 smithy :: Card
 smithy = defCard
-    { cardAction = do
-        actionDrawCards 3
-    , cardCost = 3
+    { cardAction = actionDrawCards 3
+    , cardCost = 4
     , cardName = "smithy"
     , cardType = defCardType { action = True }
     }
 
 councilRoom :: Card
 councilRoom = defCard
-    { cardAction = do
-        actionDrawCards 3
-        actionAllPlayersDrawCards 1
-        actionAddBuys 1
+    { cardAction = \cs gs -> do
+        gs <- actionDrawCards 3 cs gs
+        gs <- actionAllPlayersDrawCards 1 cs gs
+        gs <- actionAddBuys 1 cs gs
+        return gs
     , cardCost = 5
     , cardName = "council room"
     , cardType = defCardType { action = True }
@@ -232,10 +226,11 @@ councilRoom = defCard
 
 festival :: Card
 festival = defCard
-    { cardAction = do
-        actionAddActions 2
-        actionAddBuys 1
-        actionAddMoney 2
+    { cardAction = \cs gs -> do
+        gs <- actionAddActions 2 cs gs 
+        gs <- actionAddBuys 1 cs gs 
+        gs <- actionAddMoney 2 cs gs 
+        return gs
     , cardCost = 5
     , cardName = "festival"
     , cardType = defCardType { action = True }
@@ -243,11 +238,12 @@ festival = defCard
                 
 market :: Card
 market = defCard
-    { cardAction = do
-        actionAddActions 1 
-        actionAddBuys 1
-        actionAddMoney 1
-        actionDrawCards 1
+    { cardAction = \cs gs -> do
+        gs <- actionAddActions 1 cs gs
+        gs <- actionAddBuys 1 cs gs
+        gs <- actionAddMoney 1 cs gs
+        gs <- actionDrawCards 1 cs gs
+        return gs
     , cardCost = 5
     , cardName = "market"
     , cardType = defCardType { action = True }
@@ -289,14 +285,18 @@ remodel = defCard
             gs' <- drawCardFromSupply c2 gs
             updatePlayerStateM CurrentPlayer (\ps -> do
                 find (==c1) $ hand ps
-                return $ ps { hand = c2: delete c1 (hand ps) }
+                return $ ps 
+                    { hand = delete c1 (hand ps) 
+                    , discard = c2: discard ps
+                    }
                 ) gs
 
 woodcutter :: Card
 woodcutter = defCard
-    { cardAction = do
-        actionAddBuys 1
-        actionAddMoney 2
+    { cardAction = \cs gs -> do
+        gs <- actionAddBuys 1 cs gs 
+        gs <- actionAddMoney 2 cs gs
+        return gs
     , cardCost = 3
     , cardName = "woodcutter"
     , cardType = defCardType { action = True }
@@ -306,8 +306,7 @@ woodcutter = defCard
 
 moat :: Card
 moat = defCard
-    { cardAction = do
-        actionDrawCards 2
+    { cardAction = actionDrawCards 2
     , cardCost = 2
     , cardName = "moat"
     , cardType = defCardType { action = True, reaction = True }
@@ -365,8 +364,7 @@ bureaucrat = defCard
 -- The attack should trigger a discard down to 3 round that players can respond to in a custom way.
 militia :: Card
 militia = defCard
-    { cardAction = do
-        actionAddMoney 2
+    { cardAction = actionAddMoney 2
     , cardAttack = \i gs -> updatePlayerState (OnlyPlayer i) discardDownTo3 gs
     , cardCost = 4
     , cardName = "militia"
@@ -376,7 +374,7 @@ militia = defCard
         discardDownTo3 :: PlayerState -> PlayerState
         discardDownTo3 ps = if length (hand ps) <= 3
             then ps
-            else ps 
+            else discardDownTo3 $ ps 
                 { discard = worstCard : discard ps
                 , hand = delete worstCard $ hand ps
                 }
@@ -390,8 +388,7 @@ militia = defCard
 
 witch :: Card
 witch = defCard
-    { cardAction = do
-        actionDrawCards 2
+    { cardAction = actionDrawCards 2
     , cardAttack = \i gs -> case drawCardFromSupply curse gs of
         Nothing -> gs
         Just gs' -> updatePlayerState (OnlyPlayer i) (\ps -> ps { discard = curse:discard ps }) gs'

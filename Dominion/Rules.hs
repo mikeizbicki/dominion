@@ -60,6 +60,9 @@ data PlayerState = PlayerState
 getAllCards :: PlayerState -> [Card]
 getAllCards ps = deck ps ++ hand ps ++ played ps ++ discard ps
 
+countNumCards :: PlayerState -> Card -> Int
+countNumCards ps c = length $ filter (==c) $ getAllCards ps
+
 getNextCards :: Int -> PlayerState -> ([Card],PlayerState)
 getNextCards 0 ps = ([],ps)
 getNextCards n ps = case deck ps of
@@ -122,6 +125,25 @@ treasureDensity :: GameState -> Double
 treasureDensity gs = (fromIntegral $ totalTreasure gs) / (genericLength $ getAllCards $ getCurrentPlayerState gs)
 
 ----------------------------------------
+
+data Strategy = Strategy
+    { strategyName :: String
+    , strategyAction :: GameState -> Action
+--     , strategyBuy :: GameState -> [Card]
+    }
+
+instance Show Strategy where
+    show = strategyName
+
+instance Eq Strategy where
+    s1==s2 = strategyName s1==strategyName s2
+
+cpStrategy :: Strategy -> Strategy
+cpStrategy s = s { strategyName = strategyName s ++ "X" }
+
+data GameConfig = GameConfig
+    { players :: [Strategy]
+    }
 
 data GameState = GameState
     { playerStates  :: [PlayerState]

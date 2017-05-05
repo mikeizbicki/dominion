@@ -12,15 +12,15 @@ firstGame :: [Card]
 firstGame = [cellar,market,militia,mine,moat,remodel,smithy,village,woodcutter,workshop]
 
 initPlayerState :: StdGen -> PlayerState
-initPlayerState stdgen = PlayerState
-    { deck = replicate 7 copper ++ replicate 3 estate
+initPlayerState stdgen = cleanUpPhase $ PlayerState
+    { deck = [] 
     , hand = []
     , played = []
-    , discard = []
+    , discard = replicate 7 copper ++ replicate 3 estate
     , actions = 0
     , buys = 0
     , money = 0
-    , turnsCompleted = 0
+    , turnsCompleted = -1
     , stdgen = stdgen
     }
 
