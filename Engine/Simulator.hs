@@ -114,7 +114,8 @@ defPlayers =
     [ bigMoney
 --     , bigCard smithy 1
 --     , engMini
-    , engSV4
+--     , engSV4
+    , bigCard woodcutter 1
 --     , engSV2
     ]
 
@@ -198,8 +199,10 @@ computeRatings = do
 
         players' <- fmap (take 2) $ shuffleM players
         let cfg = GameConfig players'
-        gs <- runSim None $ runGame cfg
-        modifyIORef rref $ recordGame cfg gs
+
+        forM [0..9] $ \j -> do
+            gs <- runSim None $ runGame cfg
+            modifyIORef rref $ recordGame cfg gs
 
         when (i`mod`100==0) $ do
             saveRatings ratingsPath ratings

@@ -411,9 +411,7 @@ actionAddActions n _ gs = return $ updatePlayerState CurrentPlayer addActions gs
         addActions ps = ps { actions = actions ps + n }
 
 actionAddBuys :: Int -> [Card] -> GameState -> Maybe GameState
-actionAddBuys n _ = updatePlayerStateM CurrentPlayer $ \ps -> if actions ps < n
-    then Nothing
-    else Just $ ps { buys = buys ps + n }
+actionAddBuys n _ = updatePlayerStateM CurrentPlayer $ \ps -> Just $ ps { buys = buys ps + n }
 
 actionAddMoney :: Int -> [Card] -> GameState -> Maybe GameState
 actionAddMoney n _ = updatePlayerStateM CurrentPlayer $ \ps -> Just $ ps {money = money ps + n }
