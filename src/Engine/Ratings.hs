@@ -21,7 +21,8 @@ printRatings (Ratings rs) = do
     forM_ (take 50 $ sortBy (\(_,r1) (_,r2) -> compare (eloWin r2) (eloWin r1)) rs) $ \(p,r) -> do
         let dispname = take 40 $ p++repeat ' '
         putStrLn $ "  "++dispname 
-                       ++" elo: "   ++ (frontPad 5 $ showFFloat (Just 2) (score $ eloWin r) "")
+                       ++" eloW: "  ++ (frontPad 5 $ showFFloat (Just 2) (score $ eloWin r) "")
+                       ++" eloS: "  ++ (frontPad 5 $ showFFloat (Just 2) (score $ eloScore r) "")
                        ++" wins: "  ++ (frontPad 4 $ show (wins r))
                        ++" losses: "++ (frontPad 4 $ show (losses r))
                        ++" win%: "  ++ (frontPad 4 $ showFFloat (Just 2) (winPercent r) "")
@@ -38,6 +39,7 @@ saveRatings fn rs = writeFile fn $ show rs
 
 data Rating = Rating
     { eloWin    :: Elo
+    , eloScore  :: Elo
     , wins      :: Int
     , losses    :: Int
     }
@@ -52,6 +54,7 @@ winPercent r = fromIntegral (wins r) / fromIntegral (wins r + losses r)
 unrated :: Rating
 unrated = Rating
     { eloWin = defElo
+    , eloScore = defElo
     , wins = 0
     , losses = 0
     }
@@ -82,20 +85,28 @@ recordGame cfg gs rs = setRatings ((wp,wr'):zip lps lrs') rs
         wr  = getRating wp rs
         lrs = [ getRating lp rs | lp <- lps ]
 
-        welo':lelos' = updateElos ( (eloWin wr,1): zip (map eloWin lrs) (repeat 0))
+        weloWin':leloWins' = updateElos ( (eloWin wr,1): zip (map eloWin lrs) (repeat 0))
+
+        scores = map (scoreVPs . getScore gs) $ wid:lids
+        totalScore = sum scores
+        scoreFractions = map (\x -> fromIntegral x / fromIntegral totalScore) scores
+        weloScore':leloScores' = updateElos $ zip (map eloScore $ wr:lrs) scoreFractions
+
 
         wr' = Rating
-            { eloWin    = welo'
+            { eloWin    = weloWin'
+            , eloScore  = weloScore'
             , wins      = wins wr+1
             , losses    = losses wr
             }
 
-        lrs' = map f $ zip lrs lelos'
+        lrs' = map f $ zip3 lrs leloWins' leloScores'
             where
-                f (r,eloWin') = Rating
-                    { eloWin        = eloWin'
-                    , wins          = wins r
-                    , losses        = losses r + 1
+                f (r,eloWin',eloScore') = Rating
+                    { eloWin    = eloWin'
+                    , eloScore  = eloScore'
+                    , wins      = wins r
+                    , losses    = losses r + 1
                     }
 
 ----------------------------------------
@@ -120,9 +131,10 @@ updateElos xs = map go $ zip [0..] xs
                 r' = r + k*(s-e)
 
                 rs = map (score.fst) xs
-                e = sum [1/(1+10**((rs!!i) - (rs!!x))) | i <- [0..n-1], i/=x] / (fromIntegral (n*(n-1))/2)
+                e = sum [1/(1+exp((rs!!i) - (rs!!x))) | i <- [0..n-1], i/=x] 
+                  / (fromIntegral (n*(n-1))/2)
 
                 alpha = 10
-                k = alpha/(alpha+m)
+                k = alpha/(alpha+m**(2/3))
 
 
