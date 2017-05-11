@@ -18,10 +18,10 @@ newtype Ratings = Ratings [(PlayerName,Rating)]
 printRatings :: Ratings -> IO ()
 printRatings (Ratings rs) = do
     putStrLn "ratings: "
-    forM_ (take 50 $ sortBy (\(_,r1) (_,r2) -> compare (elo r2) (elo r1)) rs) $ \(p,r) -> do
+    forM_ (take 50 $ sortBy (\(_,r1) (_,r2) -> compare (eloWin r2) (eloWin r1)) rs) $ \(p,r) -> do
         let dispname = take 40 $ p++repeat ' '
         putStrLn $ "  "++dispname 
-                       ++" elo: "   ++ (frontPad 5 $ showFFloat (Just 2) (elo r) "")
+                       ++" elo: "   ++ (frontPad 5 $ showFFloat (Just 2) (score $ eloWin r) "")
                        ++" wins: "  ++ (frontPad 4 $ show (wins r))
                        ++" losses: "++ (frontPad 4 $ show (losses r))
                        ++" win%: "  ++ (frontPad 4 $ showFFloat (Just 2) (winPercent r) "")
@@ -37,9 +37,9 @@ saveRatings fn rs = writeFile fn $ show rs
 ----------------------------------------
 
 data Rating = Rating
-    { elo :: Double
-    , wins :: Int
-    , losses :: Int
+    { eloWin    :: Elo
+    , wins      :: Int
+    , losses    :: Int
     }
     deriving (Read,Show,Eq,Ord)
 
@@ -51,7 +51,7 @@ winPercent r = fromIntegral (wins r) / fromIntegral (wins r + losses r)
 
 unrated :: Rating
 unrated = Rating
-    { elo = 0
+    { eloWin = defElo
     , wins = 0
     , losses = 0
     }
@@ -71,36 +71,58 @@ setRatings []     rs = rs
 setRatings (x:xs) rs = setRatings xs $ setRating x rs
 
 recordGame :: GameConfig -> GameState -> Ratings -> Ratings
-recordGame cfg gs rs = setRatings [(wp,wr'),(lp,lr')] rs
+recordGame cfg gs rs = setRatings ((wp,wr'):zip lps lrs') rs
     where
-        winnerid = getWinner gs
-        loserid  = (winnerid+1)`mod`2
-        wp = show $ players cfg !! winnerid
-        lp = show $ players cfg !! loserid
+        wid  = getWinner gs
+        lids = delete wid $ getPlayerIDs gs
 
-        wr = getRating wp rs
-        lr = getRating lp rs
+        wp  = show $ players cfg !! wid
+        lps = [ show $ players cfg !! lid | lid <- lids ]
 
-        alpha=1
-        (welo',_) = calcElo (alpha/(alpha+(sqrt $ fromIntegral $ numGames wr))) (elo wr, elo lr)
-        (_,lelo') = calcElo (alpha/(alpha+(sqrt $ fromIntegral $ numGames lr))) (elo wr, elo lr)
+        wr  = getRating wp rs
+        lrs = [ getRating lp rs | lp <- lps ]
+
+        welo':lelos' = updateElos ( (eloWin wr,1): zip (map eloWin lrs) (repeat 0))
 
         wr' = Rating
-            { elo       = welo'
+            { eloWin    = welo'
             , wins      = wins wr+1
             , losses    = losses wr
             }
-        lr' = Rating
-            { elo       = lelo'
-            , wins      = wins lr
-            , losses    = losses lr+1
-            }
 
-        calcElo :: Double -> (Double,Double) -> (Double,Double)
-        calcElo k (r1,r2) = (r1',r2')
+        lrs' = map f $ zip lrs lelos'
             where
-                e1 = 1/(1+exp(r2-r1))
-                e2 = 1/(1+exp(r1-r2))
+                f (r,eloWin') = Rating
+                    { eloWin        = eloWin'
+                    , wins          = wins r
+                    , losses        = losses r + 1
+                    }
 
-                r1' = r1 + k*(1-e1)
-                r2' = r2 + k*(0-e2)
+----------------------------------------
+
+data Elo = Elo 
+    { score     :: !Double
+    , numgames  :: !Double
+    }
+    deriving (Show,Read,Eq,Ord)
+
+defElo :: Elo
+defElo = Elo 0 0
+
+updateElos :: [(Elo,Double)] -> [Elo]
+updateElos xs = map go $ zip [0..] xs
+    where
+        n = length xs
+
+        go :: (Int,(Elo,Double)) -> Elo
+        go (x,(Elo r m,s)) = Elo r' (m+1)
+            where
+                r' = r + k*(s-e)
+
+                rs = map (score.fst) xs
+                e = sum [1/(1+10**((rs!!i) - (rs!!x))) | i <- [0..n-1], i/=x] / (fromIntegral (n*(n-1))/2)
+
+                alpha = 10
+                k = alpha/(alpha+m)
+
+

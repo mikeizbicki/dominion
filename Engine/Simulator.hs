@@ -158,14 +158,14 @@ computeRatings = do
             , engSV3
             , engSV4
             ] 
-            ++
-            [ bigCellar 3
-            , bigCard smithy 1
-            , comboCellar mine 1
-            , comboMineMoat 1
-            , comboCellar militia 1
-            , bigCard militia 1
-            ]
+--             ++
+--             [ bigCellar 3
+--             , bigCard smithy 1
+--             , comboCellar mine 1
+--             , comboMineMoat 1
+--             , comboCellar militia 1
+--             , bigCard militia 1
+--             ]
             ++
             concatMap (\f -> [f 1, f 2, f 3])
                 [ bigCellar
@@ -186,7 +186,8 @@ computeRatings = do
                 , engRemodel 
                 ]
 
-    let ratingsPath = "ratings.txt"
+    let numPlayers = 2
+        ratingsPath = "ratings-"++show numPlayers++".txt"
     rs <- loadRatings ratingsPath
     rref <- newIORef rs
 
@@ -197,10 +198,10 @@ computeRatings = do
         ratings <- readIORef rref
         printRatings ratings
 
-        players' <- fmap (take 2) $ shuffleM players
+        players' <- fmap (take numPlayers) $ shuffleM players
         let cfg = GameConfig players'
 
-        forM [0..9] $ \j -> do
+        forM [0] $ \j -> do
             gs <- runSim None $ runGame cfg
             modifyIORef rref $ recordGame cfg gs
 
