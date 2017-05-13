@@ -11,6 +11,23 @@ import Dominion.Rules
 firstGame :: [Card]
 firstGame = [cellar,market,militia,mine,moat,remodel,smithy,village,woodcutter,workshop]
 
+sizeDistortion :: [Card]
+sizeDistortion = [artisan,bandit,bureaucrat,chapel,festival,gardens,sentry,throneRoom,witch,workshop]
+
+deckTop :: [Card]
+deckTop = [artisan,bureaucrat,councilRoom,festival,harbinger,laboratory,moneylender,sentry,vassal,village]
+
+sleightOfHand :: [Card]
+sleightOfHand = [cellar,councilRoom,festival,gardens,library,harbinger,militia,poacher,smithy,throneRoom]
+
+improvements :: [Card]
+improvements = [artisan,cellar,market,merchant,mine,moat,moneylender,poacher,remodel,witch]
+
+silverAndGold :: [Card]
+silverAndGold = [bandit,bureaucrat,chapel,harbinger,laboratory,merchant,mine,moneylender,throneRoom,vassal]
+
+----------------------------------------
+
 initPlayerState :: StdGen -> PlayerState
 initPlayerState stdgen = cleanUpPhase $ PlayerState
     { deck = [] 

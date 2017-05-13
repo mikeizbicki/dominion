@@ -302,6 +302,76 @@ woodcutter = defCard
     , cardType = defCardType { action = True }
     }
 
+laboratory :: Card
+laboratory = defCard
+    { cardAction = \cs gs -> do
+        gs <- actionDrawCards 2 cs gs
+        gs <- actionAddActions 1 cs gs
+        return gs
+    , cardCost = 5
+    , cardName = "laboratory"
+    , cardType = defCardType { action = True }
+    }
+
+moneylender :: Card
+moneylender = defCard
+    { cardAction = \cs gs ->
+        if elem copper $ hand $ getCurrentPlayerState gs
+            then do
+                gs <- return $ updatePlayerState CurrentPlayer (\ps -> ps { hand = delete copper $ hand ps }) gs
+                gs <- actionAddMoney 3 cs gs
+                return gs
+            else return gs
+    , cardCost = 4
+    , cardName = "moneylender"
+    , cardType = defCardType { action = True }
+    }
+ 
+merchant :: Card
+merchant = defCard
+    { cardAction = \cs gs -> do
+        gs <- actionDrawCards 1 cs gs
+        gs <- actionAddActions 1 cs gs
+        gs <- if elem silver $ played $ getCurrentPlayerState gs
+            then actionAddMoney 1 cs gs
+            else return gs
+        return gs
+    , cardCost = 3
+    , cardName = "merchant"
+    , cardType = defCardType { action = True }
+    }
+
+artisan :: Card
+artisan = defCard
+    { cardAction = artisanAction
+    , cardCost = 6
+    , cardName = "artisan"
+    , cardType = defCardType { action = True }
+    }
+    where
+        artisanAction (c1:c2:[]) gs = do
+            gs <- drawCardFromSupply c1 gs
+            _ <- find (==c2) $ hand $ getCurrentPlayerState gs
+            let f ps = ps
+                    { hand = c1:delete c2 (hand ps)
+                    , deck = c2:deck ps
+                    }
+            gs <- return $ updatePlayerState CurrentPlayer f gs
+            return gs
+        artisanAction _ _ = Nothing
+
+poacher :: Card
+poacher = defCard { cardAction = undefined }
+
+throneRoom :: Card
+throneRoom = defCard { cardAction = undefined }
+
+sentry :: Card
+sentry = defCard { cardAction = undefined }
+
+library :: Card
+library = defCard { cardAction = undefined }
+
 --------------------
 
 moat :: Card

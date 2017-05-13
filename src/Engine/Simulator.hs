@@ -193,6 +193,7 @@ computeRatings = do
 
     clearScreen
     forM [0..] $ \i -> do
+--         clearScreen
         setCursorPosition 0 0
         putStrLn $ "starting game "++show i
         ratings <- readIORef rref
