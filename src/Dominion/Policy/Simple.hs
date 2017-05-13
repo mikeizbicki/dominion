@@ -1,4 +1,4 @@
-module Dominion.Strategy
+module Dominion.Policy.Simple
     where
 
 import Data.Monoid
@@ -9,118 +9,111 @@ import Dominion.Rules
 
 ----------------------------------------
 
-bigMoney :: Strategy
-bigMoney = Strategy
-    { strategyName = "big money"
-    , strategyAction 
-        = playAllCards
-       <> buyList [province,gold,silver]
+defPolicy :: Policy
+defPolicy = Policy
+    { policyName = error "policyName undefined"
+    , policyAction = playAllCards
+    , policyBuy = error "policyBuy undefined"
     }
 
-bigVP :: Strategy
-bigVP = Strategy
-    { strategyName = "big VP"
-    , strategyAction 
-        = playAllCards
-       <> buyList [province,gold,duchy,silver,estate]
+bigMoney :: Policy
+bigMoney = defPolicy
+    { policyName = "big money"
+    , policyBuy = buyList [province,gold,silver]
     }
 
-bigCard :: Card -> Int -> Strategy
-bigCard c n = Strategy
-    { strategyName = "big "++show c++" x"++show n
-    , strategyAction
-        = playAllCards
-       <> buyList [province,gold]
+bigVP :: Policy
+bigVP = defPolicy
+    { policyName = "big VP"
+    , policyBuy = buyList [province,gold,duchy,silver,estate]
+    }
+
+bigCard :: Card -> Int -> Policy
+bigCard c n = defPolicy
+    { policyName = "big "++show c++" x"++show n
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo n c
        <> buy silver
     }
 
-bigMine :: Int -> Strategy
-bigMine n = Strategy
-    { strategyName = "big mine x"++show n
-    , strategyAction 
-        = playAllCards
-       <> buyList [province,gold]
+bigMine :: Int -> Policy
+bigMine n = defPolicy
+    { policyName = "big mine x"++show n
+    , policyBuy 
+        = buyList [province,gold]
        <> buyUpTo n mine
        <> buy silver
     }
 
-bigCellar :: Int -> Strategy
-bigCellar n = Strategy
-    { strategyName = "big cellar x"++show n
-    , strategyAction
-        = playAllCards
-       <> buyList [province,gold,silver]
+bigCellar :: Int -> Policy
+bigCellar n = defPolicy
+    { policyName = "big cellar x"++show n
+    , policyBuy
+        = buyList [province,gold,silver]
        <> buyUpTo n cellar
     }
 
-comboCellar :: Card -> Int -> Strategy
-comboCellar card n = Strategy
-    { strategyName = "combo cellar "++show card++" x"++show n
-    , strategyAction
-        = playAllCards
-       <> buyList [province,gold]
+comboCellar :: Card -> Int -> Policy
+comboCellar card n = defPolicy
+    { policyName = "combo cellar "++show card++" x"++show n
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo n card
        <> buyList [silver,cellar]
     }
 
-comboCellarMine :: Int -> Strategy
-comboCellarMine n = Strategy
-    { strategyName = "combo cellar mine x"++show n
-    , strategyAction 
-        = playAllCards
-       <> buyList [province,gold]
+comboCellarMine :: Int -> Policy
+comboCellarMine n = defPolicy
+    { policyName = "combo cellar mine x"++show n
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo n mine
        <> buyList [silver,cellar]
     }
 
-comboMineMoat :: Int -> Strategy
-comboMineMoat n = Strategy
-    { strategyName = "combo mine x"++show n++" moat"
-    , strategyAction 
-        = playAllCards
-       <> buyList [province,gold]
+comboMineMoat :: Int -> Policy
+comboMineMoat n = defPolicy
+    { policyName = "combo mine x"++show n++" moat"
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo n mine
        <> buyList [silver,moat]
     }
 
-bigChapel :: Int -> Strategy
-bigChapel n = Strategy
-    { strategyName = "big chapel x"++show n
-    , strategyAction
-        = playAllCards
-       <> buyList [province,gold,silver]
+bigChapel :: Int -> Policy
+bigChapel n = defPolicy
+    { policyName = "big chapel x"++show n
+    , policyBuy
+        = buyList [province,gold,silver]
        <> buyUpTo n chapel
     }
 
-engMSM :: Strategy
-engMSM = Strategy
-    { strategyName = "engine MSM"
-    , strategyAction
-        = playAllCards
-       <> buyList [province,gold]
+engMSM :: Policy
+engMSM = defPolicy
+    { policyName = "engine MSM"
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo 1 mine
        <> buyUpTo 1 smithy
        <> buyList [silver,moat]
     }
 
-engMMSM :: Strategy
-engMMSM = Strategy
-    { strategyName = "engine MMSM"
-    , strategyAction
-        = playAllCards
-       <> buyList [province,gold]
+engMMSM :: Policy
+engMMSM = defPolicy
+    { policyName = "engine MMSM"
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo 2 mine
        <> buyUpTo 1 smithy
        <> buyList [silver,moat]
     }
 
-engMMSVM :: Strategy
-engMMSVM = Strategy
-    { strategyName = "engine MMSVM"
-    , strategyAction
-        = playAllCards
-       <> buyList [province,gold]
+engMMSVM :: Policy
+engMMSVM = defPolicy
+    { policyName = "engine MMSVM"
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo 2 mine
        <> buyUpTo 1 smithy
        <> buyUpTo 3 silver
@@ -128,12 +121,11 @@ engMMSVM = Strategy
        <> buyList [silver,moat]
     }
 
-engMMSVSVM :: Strategy
-engMMSVSVM = Strategy
-    { strategyName = "engine MMSVSVM"
-    , strategyAction
-        = playAllCards
-       <> buyList [province,gold]
+engMMSVSVM :: Policy
+engMMSVSVM = defPolicy
+    { policyName = "engine MMSVSVM"
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo 2 mine
        <> buyUpTo 1 smithy
        <> buyUpTo 3 silver
@@ -143,12 +135,11 @@ engMMSVSVM = Strategy
        <> buyList [silver,moat]
     }
 
-engMSVSVM :: Strategy
-engMSVSVM = Strategy
-    { strategyName = "engine MSVSVM"
-    , strategyAction
-        = playAllCards
-       <> buyList [province,gold]
+engMSVSVM :: Policy
+engMSVSVM = defPolicy
+    { policyName = "engine MSVSVM"
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo 1 mine
        <> buyUpTo 1 smithy
        <> buyUpTo 3 silver
@@ -158,12 +149,11 @@ engMSVSVM = Strategy
        <> buyList [silver,moat]
     }
 
-engMSVM :: Strategy
-engMSVM = Strategy
-    { strategyName = "engine MSVM"
-    , strategyAction
-        = playAllCards
-       <> buyList [province,gold]
+engMSVM :: Policy
+engMSVM = defPolicy
+    { policyName = "engine MSVM"
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo 1 mine
        <> buyUpTo 1 smithy
        <> buyUpTo 3 silver
@@ -171,22 +161,20 @@ engMSVM = Strategy
        <> buyList [silver,moat]
     }
 
-engRemodel :: Int -> Strategy
-engRemodel n = Strategy
-    { strategyName = "engine remodel x"++show n
-    , strategyAction
-        = playAllCards
-       <> buyList [province,gold]
+engRemodel :: Int -> Policy
+engRemodel n = defPolicy
+    { policyName = "engine remodel x"++show n
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo n remodel
        <> buy silver
     }
 
-engMini :: Strategy
-engMini = Strategy
-    { strategyName = "engine mini"
-    , strategyAction 
-        = playAllCards
-       <> buyList [province,gold]
+engMini :: Policy
+engMini = defPolicy
+    { policyName = "engine mini"
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo 2 witch
        <> buyUpTo 2 smithy
        <> buyUpTo 1 village
@@ -195,12 +183,11 @@ engMini = Strategy
        <> buyList [smithy,silver,cellar]
     }
 
-engMoat :: Strategy
-engMoat = Strategy
-    { strategyName = "engine moat"
-    , strategyAction 
-        = playAllCards
-       <> buyList [province,gold]
+engMoat :: Policy
+engMoat = defPolicy
+    { policyName = "engine moat"
+    , policyBuy
+        = buyList [province,gold]
        <> buyUpTo 1 witch
        <> buyList [smithy]
        <> buyUpTo 1 village
@@ -208,17 +195,16 @@ engMoat = Strategy
        <> buyList [village,silver]
     }
 
-engSV1 :: Strategy
-engSV1 = Strategy
-    { strategyName = "engine smithy+village v1"
-    , strategyAction = \gs -> let ps = getCurrentPlayerState gs in
-        ( playAllCards
-       <> buy province
-       <> (if turnsCompleted ps == 0 && money ps == 2 then buy copper else pass)
-       <> (if turnsCompleted ps == 1 && money ps == 2 then buy copper else pass)
-       <> (if turnsCompleted ps == 0 && money ps == 5 then buy smithy else pass)
-       <> (if turnsCompleted ps == 1 && money ps == 5 then buy smithy else pass)
-       <> (if turnsCompleted ps == 0 || turnsCompleted ps == 1 then buyList [smithy,silver] else pass)
+engSV1 :: Policy
+engSV1 = defPolicy
+    { policyName = "engine smithy+village v1"
+    , policyBuy = \gs -> let ps = getCurrentPlayerState gs in
+        ( buy province
+       <> (if turnsCompleted ps == 0 && money ps == 2 then buy copper else passBuy)
+       <> (if turnsCompleted ps == 1 && money ps == 2 then buy copper else passBuy)
+       <> (if turnsCompleted ps == 0 && money ps == 5 then buy smithy else passBuy)
+       <> (if turnsCompleted ps == 1 && money ps == 5 then buy smithy else passBuy)
+       <> (if turnsCompleted ps == 0 || turnsCompleted ps == 1 then buyList [smithy,silver] else passBuy )
        <> (if countNumCards ps village > countNumCards ps smithy
             then buy village
             else buy smithy
@@ -227,27 +213,26 @@ engSV1 = Strategy
         ) gs
     }
 
-engSV2 :: Strategy
-engSV2 = Strategy
-    { strategyName = "engine smithy+village v2"
-    , strategyAction = \gs -> let ps = getCurrentPlayerState gs in
-        ( playAllCards
-       <> (if countNumCards ps smithy >= 3
+engSV2 :: Policy
+engSV2 = defPolicy
+    { policyName = "engine smithy+village v2"
+    , policyBuy = \gs -> let ps = getCurrentPlayerState gs in
+        ( (if countNumCards ps smithy >= 3
             then buy province
-            else pass
+            else passBuy
           )
        <> (if countNumCards ps province >= 3
             then buyList [duchy,estate]
-            else pass
+            else passBuy
           )
-       <> (if turnsCompleted ps == 0 && money ps == 2 then buy copper else pass)
-       <> (if turnsCompleted ps == 1 && money ps == 2 then buy copper else pass)
-       <> (if turnsCompleted ps == 0 && money ps == 5 then buy smithy else pass)
-       <> (if turnsCompleted ps == 1 && money ps == 5 then buy smithy else pass)
-       <> (if turnsCompleted ps == 0 || turnsCompleted ps == 1 then buyList [smithy,silver] else pass)
+       <> (if turnsCompleted ps == 0 && money ps == 2 then buy copper else passBuy)
+       <> (if turnsCompleted ps == 1 && money ps == 2 then buy copper else passBuy)
+       <> (if turnsCompleted ps == 0 && money ps == 5 then buy smithy else passBuy)
+       <> (if turnsCompleted ps == 1 && money ps == 5 then buy smithy else passBuy)
+       <> (if turnsCompleted ps == 0 || turnsCompleted ps == 1 then buyList [smithy,silver] else passBuy )
        <> (if money ps >= 7 && buys ps > 1
             then buy smithy
-            else pass
+            else passBuy
           )
        <> buyUpTo 1 gold
        <> buyUpTo 5 market
@@ -260,27 +245,26 @@ engSV2 = Strategy
         ) gs
     }
 
-engSV3 :: Strategy
-engSV3 = Strategy
-    { strategyName = "engine smithy+village v3"
-    , strategyAction = \gs -> let ps = getCurrentPlayerState gs in
-        ( playAllCards
-       <> (if countNumCards ps smithy >= 3
+engSV3 :: Policy
+engSV3 = defPolicy
+    { policyName = "engine smithy+village v3"
+    , policyBuy = \gs -> let ps = getCurrentPlayerState gs in
+        ( (if countNumCards ps smithy >= 3
             then buy province
-            else pass
+            else passBuy
           )
        <> (if countNumCards ps province >= 3
             then buyList [duchy,estate]
-            else pass
+            else passBuy
           )
-       <> (if turnsCompleted ps == 0 && money ps == 2 then buy copper else pass)
-       <> (if turnsCompleted ps == 1 && money ps == 2 then buy copper else pass)
-       <> (if turnsCompleted ps == 0 && money ps == 5 then buy militia else pass)
-       <> (if turnsCompleted ps == 1 && money ps == 5 then buy militia else pass)
-       <> (if turnsCompleted ps == 0 || turnsCompleted ps == 1 then buyList [militia,silver] else pass)
+       <> (if turnsCompleted ps == 0 && money ps == 2 then buy copper else passBuy)
+       <> (if turnsCompleted ps == 1 && money ps == 2 then buy copper else passBuy)
+       <> (if turnsCompleted ps == 0 && money ps == 5 then buy militia else passBuy)
+       <> (if turnsCompleted ps == 1 && money ps == 5 then buy militia else passBuy)
+       <> (if turnsCompleted ps == 0 || turnsCompleted ps == 1 then buyList [militia,silver] else passBuy)
        <> (if money ps >= 7 && buys ps > 1
             then buy smithy
-            else pass
+            else passBuy
           )
        <> buyUpTo 1 gold 
        <> buyUpTo 5 market 
@@ -294,12 +278,11 @@ engSV3 = Strategy
        ) gs
     }
 
-engSV4 :: Strategy
-engSV4 = Strategy
-    { strategyName = "engine smithy+village v4"
-    , strategyAction = \gs -> let ps = getCurrentPlayerState gs in
-        ( playList [village,market]
-       <> (if countNumCards ps village < countNumCards ps smithy
+engSV4 :: Policy
+engSV4 = defPolicy
+    { policyName = "engine smithy+village v4"
+    , policyAction = \gs -> let ps = getCurrentPlayerState gs in
+        ( (if countNumCards ps village < countNumCards ps smithy
             then try (Play remodel [estate,village])
             else try (Play remodel [estate,smithy])
           )
@@ -313,22 +296,24 @@ engSV4 = Strategy
           )
        <> playMoney
        <> playList [militia,smithy,moat]
-       <> (if countNumCards ps smithy >= 3
+       ) gs
+    , policyBuy = \gs -> let ps = getCurrentPlayerState gs in
+        ( (if countNumCards ps smithy >= 3
             then buy province
-            else pass
+            else passBuy
           )
        <> (if countNumCards ps province >= 4
             then buyList [duchy,estate]
-            else pass
+            else passBuy
           )
-       <> (if turnsCompleted ps == 0 && money ps == 2 then buy copper else pass)
-       <> (if turnsCompleted ps == 1 && money ps == 2 then buy copper else pass)
-       <> (if turnsCompleted ps == 0 && money ps == 5 then buy militia else pass)
-       <> (if turnsCompleted ps == 1 && money ps == 5 then buy militia else pass)
-       <> (if turnsCompleted ps == 0 || turnsCompleted ps == 1 then buyList [militia,silver] else pass)
+       <> (if turnsCompleted ps == 0 && money ps == 2 then buy copper else passBuy)
+       <> (if turnsCompleted ps == 1 && money ps == 2 then buy copper else passBuy)
+       <> (if turnsCompleted ps == 0 && money ps == 5 then buy militia else passBuy)
+       <> (if turnsCompleted ps == 1 && money ps == 5 then buy militia else passBuy)
+       <> (if turnsCompleted ps == 0 || turnsCompleted ps == 1 then buyList [militia,silver] else passBuy)
        <> (if money ps >= 7 && buys ps > 1
             then buy smithy
-            else pass
+            else passBuy
           )
        <> buyUpTo 1 remodel
        <> buyUpTo 1 militia 
@@ -343,7 +328,6 @@ engSV4 = Strategy
        <> buyUpTo 3 moat
        ) gs
     }
-    
     
 ----------------------------------------
 
@@ -429,19 +413,36 @@ playChapel gs = flip try gs $ Play chapel $ go (totalMoney $ hand ps) [] $ hand 
                     then totalMoney xs+3
                     else totalMoney xs
 
-
 ----------------------------------------
+
+tryBuy :: Buy -> GameState -> Buy
+tryBuy cmdbuy gs = case resolveBuy cmdbuy gs of
+    Nothing -> Buy []
+    Just _  -> cmdbuy
+
+passBuy :: GameState -> Buy
+passBuy _ = Buy []
+
+buy :: Card -> GameState -> Buy
+buy c gs = tryBuy (Buy [c]) gs
+
+buyList :: [Card] -> GameState -> Buy
+buyList = fmap mconcat . mapM buy
+
+buyUpTo :: Int -> Card -> GameState -> Buy
+buyUpTo n c gs = if n <= numCards c (getCurrentPlayerState gs)
+    then Buy []
+    else buy c gs
+
+--------------------
 
 pass :: GameState -> Action
 pass _ = Pass
 
 try :: Action -> GameState -> Action
-try a gs = case doAction gs a of
+try a gs = case resolveAction a gs of
     Nothing -> Pass
     Just _  -> a
-
-buy :: Card -> GameState -> Action
-buy c = try (Buy c)
 
 play :: Card -> GameState -> Action
 play c = try (Play c [])
@@ -449,19 +450,11 @@ play c = try (Play c [])
 tryList :: [Action] -> GameState -> Action
 tryList = fmap mconcat . mapM try
 
-buyList :: [Card] -> GameState -> Action
-buyList = tryList . map Buy
-
 playList :: [Card] -> GameState -> Action
 playList = tryList . map (\c -> Play c [])
 
 playMoney :: GameState -> Action
 playMoney = playList [gold,silver,copper]
-
-buyUpTo :: Int -> Card -> GameState -> Action
-buyUpTo n c gs = if n <= numCards c (getCurrentPlayerState gs)
-    then Pass
-    else buy c gs
 
 numCards :: Card -> PlayerState -> Int
 numCards c ps = sum $ map (\c' -> if c==c' then 1 else 0) $ getAllCards ps

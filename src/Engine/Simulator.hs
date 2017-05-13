@@ -15,7 +15,7 @@ import System.Random.Shuffle
 import Dominion.Cards
 import Dominion.Rules
 import Dominion.Setup
-import Dominion.Strategy
+import Dominion.Policy.Simple
 import Engine.Monad
 import Engine.Ratings
 
@@ -35,7 +35,8 @@ doTurn cfg gs = do
 --     when (players cfg !! currentPlayer gs == bigMoney)
 --         $ writeMsg None $ " vpDensity: " ++ showFFloat (Just 2) (vpDensity gs) "" 
 --                  ++ "; treasureDensity: "++ showFFloat (Just 2) (treasureDensity gs) ""
-    gs <- go gs
+    gs <- goAction gs
+    gs <- goBuy gs
     writeMsg Turn $ "deck: " ++ show (deck $ getCurrentPlayerState gs)
     writeMsg Turn $ "hand: " ++ show (hand $ getCurrentPlayerState gs)
     writeMsg Turn $ "played: " ++ show (played $ getCurrentPlayerState gs)
@@ -45,7 +46,7 @@ doTurn cfg gs = do
         { currentPlayer = (currentPlayer gs + 1) `mod` numPlayers gs 
         }
     where
-        go gs = case doAction gs action of
+        goAction gs = case resolveAction action gs of
             Nothing -> return gs
             Just gs' -> do
                 let ps' = getCurrentPlayerState gs'
@@ -53,10 +54,26 @@ doTurn cfg gs = do
                                     ++ "buys:"++show (buys ps')
                                     ++ "; money: "++show (money ps')
                                     ++ "; actions: "++show (actions ps')
-                go gs'
+                goAction gs'
             where
                 action :: Action
-                action = strategyAction (players cfg !! currentPlayer gs) gs
+                action = policyAction (players cfg !! currentPlayer gs) gs
+
+        goBuy gs = case resolveBuy cmdbuy gs of
+            Nothing -> do
+                writeMsg Turn $ "  "++ "attempted to play: "++show cmdbuy
+                return gs
+            Just gs' -> do
+                let ps' = getCurrentPlayerState gs'
+                writeMsg Turn $ "  "++ padRight 30 (show cmdbuy) 
+                                    ++ "buys:"++show (buys ps')
+                                    ++ "; money: "++show (money ps')
+                                    ++ "; actions: "++show (actions ps')
+                goBuy gs'
+            where
+                cmdbuy :: Buy
+                cmdbuy = policyBuy (players cfg !! currentPlayer gs) gs
+        
 
         padRight n xs = xs ++ replicate (n-length xs) ' ' 
 
@@ -109,7 +126,7 @@ runGame cfg = do
                 gs' <- doTurn cfg gs
                 go gs' 
 
-defPlayers :: [Strategy]
+defPlayers :: [Policy]
 defPlayers = 
     [ bigMoney
 --     , bigCard smithy 1

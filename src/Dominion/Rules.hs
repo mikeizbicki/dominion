@@ -18,7 +18,7 @@ import Debug.Trace
 -- There is no way to enforce this invariant within the type system.
 --
 -- FIXME:
--- The moat's reaction ability is hardcoded in the `doAction` function rather than appearing as a property here.
+-- The moat's reaction ability is hardcoded in the `resolveAction` function rather than appearing as a property here.
 data Card = Card
     { cardVPs       :: PlayerState -> Int
     , cardAction    :: [Card] -> GameState -> Maybe GameState
@@ -126,23 +126,8 @@ treasureDensity gs = (fromIntegral $ totalTreasure gs) / (genericLength $ getAll
 
 ----------------------------------------
 
-data Strategy = Strategy
-    { strategyName :: String
-    , strategyAction :: GameState -> Action
---     , strategyBuy :: GameState -> [Card]
-    }
-
-instance Show Strategy where
-    show = strategyName
-
-instance Eq Strategy where
-    s1==s2 = strategyName s1==strategyName s2
-
-cpStrategy :: Strategy -> Strategy
-cpStrategy s = s { strategyName = strategyName s ++ "X" }
-
 data GameConfig = GameConfig
-    { players :: [Strategy]
+    { players :: [Policy]
     }
 
 data GameState = GameState
@@ -227,9 +212,53 @@ getScore gs n = Score
 
 ----------------------------------------
 
+data Policy = Policy
+    { policyName    :: String
+    , policyAction  :: GameState -> Action
+    , policyBuy     :: GameState -> Buy
+    }
+
+instance Show Policy where
+    show = policyName
+
+instance Eq Policy where
+    s1==s2 = policyName s1==policyName s2
+
+cpPolicy :: Policy -> Policy
+cpPolicy s = s { policyName = policyName s ++ "X" }
+
+----------------------------------------
+
+newtype Buy = Buy [Card]
+    deriving (Show,Eq)
+
+instance Monoid Buy where
+    (Buy []) `mappend` x = x
+    x        `mappend` _ = x
+    mempty               = Buy []
+
+resolveBuy :: Buy -> GameState -> Maybe GameState
+resolveBuy (Buy []) gs = Nothing
+resolveBuy (Buy cs) gs = go cs gs
+    where
+        go [] gs = Just gs
+        go (c:cs) gs = if cardCost c <= money ps && buys ps > 0
+            then do
+                gs <- drawCardFromSupply c gs
+                gs <- return $ setCurrentPlayerState gs $ ps
+                    { discard = c:discard ps
+                    , money = money ps - cardCost c
+                    , buys = buys ps - 1
+                    }
+                go cs gs
+            else Nothing
+            where
+                ps = getCurrentPlayerState gs
+
+----------------------------------------
+
 data Action
     = Play Card [Card]
-    | Buy Card
     | Pass
     deriving (Show)
 
@@ -238,9 +267,9 @@ instance Monoid Action where
     x    `mappend` _ = x
     mempty = Pass
 
-doAction :: GameState -> Action -> Maybe GameState
-doAction gs Pass = Nothing
-doAction gs (Play c cs) = do
+resolveAction :: Action -> GameState -> Maybe GameState
+resolveAction Pass        gs = Nothing
+resolveAction (Play c cs) gs = do
     gs <- updatePlayerStateM CurrentPlayer (\ps -> 
         if (action (cardType c) && actions ps <1)
             then Nothing
@@ -259,18 +288,8 @@ doAction gs (Play c cs) = do
             Nothing -> if attack $ cardType c 
                 then cardAttack c i gs
                 else gs
-doAction gs (Buy c) = if (cardCost c <= money ps) 
-                      && (buys ps > 0) 
-    then drawCardFromSupply c
-              $ setCurrentPlayerState gs 
-              $ ps 
-                { discard = c:discard ps 
-                , money = money ps - cardCost c
-                , buys = buys ps - 1
-                }
-    else Nothing
-    where 
-        ps = getCurrentPlayerState gs
+
+----------------------------------------
 
 data Pile
     = Supply
