@@ -4,7 +4,7 @@ module Engine.Simulator
 import Data.IORef
 import Data.List
 import Control.Monad
-import Control.Monad.Random (StdGen,split)
+import Control.Monad.Random (StdGen,split,MonadRandom)
 import Control.Monad.Reader
 import Numeric
 
@@ -16,6 +16,7 @@ import Dominion.Cards
 import Dominion.Rules
 import Dominion.Setup
 import Dominion.Policy.Simple
+-- import Dominion.Policy.MDP
 import Engine.Monad
 import Engine.Ratings
 
@@ -35,47 +36,17 @@ doTurn cfg gs = do
 --     when (players cfg !! currentPlayer gs == bigMoney)
 --         $ writeMsg None $ " vpDensity: " ++ showFFloat (Just 2) (vpDensity gs) "" 
 --                  ++ "; treasureDensity: "++ showFFloat (Just 2) (treasureDensity gs) ""
-    gs <- goAction gs
-    gs <- goBuy gs
+    gs <- doAction (policyAction (players cfg !! currentPlayer gs)) gs
+    gs <- doBuy    (policyBuy    (players cfg !! currentPlayer gs)) gs
     writeMsg Turn $ "deck: " ++ show (deck $ getCurrentPlayerState gs)
     writeMsg Turn $ "hand: " ++ show (hand $ getCurrentPlayerState gs)
     writeMsg Turn $ "played: " ++ show (played $ getCurrentPlayerState gs)
     writeMsg Turn $ "discard: " ++ show (discard $ getCurrentPlayerState gs)
-    gs <- return $ updatePlayerState CurrentPlayer cleanUpPhase gs
+    gs <- updatePlayerStateM CurrentPlayer cleanUpPhase gs
     return $ gs 
         { currentPlayer = (currentPlayer gs + 1) `mod` numPlayers gs 
         }
     where
-        goAction gs = case resolveAction action gs of
-            Nothing -> return gs
-            Just gs' -> do
-                let ps' = getCurrentPlayerState gs'
-                writeMsg Turn $ "  "++ padRight 30 (show action) 
-                                    ++ "buys:"++show (buys ps')
-                                    ++ "; money: "++show (money ps')
-                                    ++ "; actions: "++show (actions ps')
-                goAction gs'
-            where
-                action :: Action
-                action = policyAction (players cfg !! currentPlayer gs) gs
-
-        goBuy gs = case resolveBuy cmdbuy gs of
-            Nothing -> do
-                writeMsg Turn $ "  "++ "attempted to play: "++show cmdbuy
-                return gs
-            Just gs' -> do
-                let ps' = getCurrentPlayerState gs'
-                writeMsg Turn $ "  "++ padRight 30 (show cmdbuy) 
-                                    ++ "buys:"++show (buys ps')
-                                    ++ "; money: "++show (money ps')
-                                    ++ "; actions: "++show (actions ps')
-                goBuy gs'
-            where
-                cmdbuy :: Buy
-                cmdbuy = policyBuy (players cfg !! currentPlayer gs) gs
-        
-
-        padRight n xs = xs ++ replicate (n-length xs) ' ' 
 
 
 isGameOver :: GameState -> Bool
@@ -92,26 +63,22 @@ isGameOver gs = noprovince || empty3
                 go (_,0) = 1
                 go _     = 0
 
-mkGameState :: StdGen -> GameConfig -> GameState
-mkGameState sg cfg = GameState
-    { playerStates = mkPlayerStates sg n
-    , supply = mkSupply (length $ players cfg) firstGame 
-    , currentPlayer = 0
-    , currentRound = 0
-    }
+mkGameState :: MonadRandom m => GameConfig -> m GameState
+mkGameState cfg = do
+    playerStates0 <- replicateM n initPlayerState
+    return $ GameState
+        { playerStates = playerStates0
+        , supply = mkSupply n firstGame 
+        , currentPlayer = 0
+        , currentRound = 0
+        }
     where
         n = length $ players cfg
-
-        mkPlayerStates sg 0 = []
-        mkPlayerStates sg i = initPlayerState sg1:mkPlayerStates sg2 (i-1)
-            where
-                (sg1,sg2) = split sg
 
 runGame :: GameConfig -> Sim GameState
 runGame cfg = do
     sg <- mkStdGen
---     let sg = mkStdGen 0
-    let gs = mkGameState sg cfg
+    gs <- mkGameState cfg
     gs <- go gs
     writeMsg Game "==========================="
     writeMsg Game "final results"
@@ -129,11 +96,12 @@ runGame cfg = do
 defPlayers :: [Policy]
 defPlayers = 
     [ bigMoney
---     , bigCard smithy 1
+    , bigCard smithy 1
 --     , engMini
 --     , engSV4
-    , bigCard woodcutter 1
+--     , bigCard woodcutter 1
 --     , engSV2
+--     , mdp
     ]
 
 watchGame :: IO ()

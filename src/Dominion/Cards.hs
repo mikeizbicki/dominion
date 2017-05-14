@@ -2,6 +2,8 @@ module Dominion.Cards
     where
 
 import Control.Monad
+import Control.Monad.Random
+import Control.Monad.Trans.Maybe
 import Data.List
 
 import Dominion.Rules
@@ -11,7 +13,7 @@ import Dominion.Rules
 defCard :: Card
 defCard = Card
     { cardVPs = \_ -> 0
-    , cardAction = \_ gs -> Just gs
+    , cardAction = \_ gs -> MaybeT $ return $ Just gs
     , cardAttack = error "card attack undefined"
     , cardCost = error "card cost undefined"
     , cardName = error "card name undefined"
@@ -100,11 +102,11 @@ cellar = defCard
     , cardType = defCardType { action = True }
     }
     where
-        actionDiscardCards :: [Card] -> GameState -> Maybe GameState
-        actionDiscardCards []     gs = Just gs
-        actionDiscardCards (c:cs) gs = do
-            gs <- updatePlayerStateM CurrentPlayer discardCard gs
-            gs <- actionDrawCards 1 [] gs
+        actionDiscardCards :: MonadRandom m => ActionParams -> GameState -> MaybeT m GameState
+        actionDiscardCards (APList [])     gs = MaybeT $ return $ Just gs
+        actionDiscardCards (APList (c:cs)) gs = do
+            gs <- MaybeT $ return $ updatePlayerStateM CurrentPlayer discardCard gs
+            gs <- actionDrawCards 1 APNone gs
             return gs
             where
                 discardCard :: PlayerState -> Maybe PlayerState
@@ -117,15 +119,15 @@ cellar = defCard
 
 chapel :: Card
 chapel = defCard
-    { cardAction = actionTrashCards
+    { cardAction = \ap gs -> MaybeT $ return $ actionTrashCards ap gs
     , cardCost = 2
     , cardName = "chapel"
     , cardType = defCardType { action = True }
     }
     where
-        actionTrashCards :: [Card] -> GameState -> Maybe GameState
-        actionTrashCards []     gs = Just gs
-        actionTrashCards (c:cs) gs = updatePlayerStateM CurrentPlayer trashCard gs
+        actionTrashCards :: ActionParams -> GameState -> Maybe GameState
+        actionTrashCards (APList [])     gs = Just gs
+        actionTrashCards (APList (c:cs)) gs = updatePlayerStateM CurrentPlayer trashCard gs
             where
                 trashCard :: PlayerState -> Maybe PlayerState
                 trashCard ps = case find (==c) $ hand ps of
@@ -137,16 +139,16 @@ harbinger = defCard
     { cardAction = \cs gs -> do
         gs <- actionDrawCards 1 cs gs
         gs <- actionAddActions 1 cs gs
-        gs <- actionDiscardToDeck cs gs
+        gs <- MaybeT $ return $ actionDiscardToDeck cs gs
         return gs
     , cardCost = 3
     , cardName = "harbinger"
     , cardType = defCardType { action = True }
     }
     where
-        actionDiscardToDeck :: [Card] -> GameState -> Maybe GameState
-        actionDiscardToDeck [ ] gs = Just gs
-        actionDiscardToDeck [c] gs = updatePlayerStateM CurrentPlayer discard2deck gs
+        actionDiscardToDeck :: ActionParams -> GameState -> Maybe GameState
+        actionDiscardToDeck (APList [ ]) gs = Just gs
+        actionDiscardToDeck (APList [c]) gs = updatePlayerStateM CurrentPlayer discard2deck gs
             where
                 discard2deck ps = case find (==c) $ discard ps of
                     Nothing -> Nothing
@@ -167,25 +169,27 @@ vassal = defCard
     , cardType = defCardType { action = True }
     }
     where
-        actionPlayTopCard :: [Card] -> GameState -> Maybe GameState
+        actionPlayTopCard :: MonadRandom m => ActionParams -> GameState -> MaybeT m GameState
         actionPlayTopCard _ gs = updatePlayerStateM CurrentPlayer action2hand gs
             where
-                action2hand ps = case getNextCards 1 ps of
-                    ([c],ps') -> if action $ cardType c
-                        then Just $ ps' { hand = c : hand ps' }
-                        else Just $ ps' { discard = c : discard ps' }
-                    _         -> Nothing
+                action2hand ps = do 
+                    tmp <- getNextCards 1 ps 
+                    case tmp of
+                        ([c],ps') -> if action $ cardType c
+                            then return $ ps' { hand = c : hand ps' }
+                            else return $ ps' { discard = c : discard ps' }
+                        _         -> MaybeT $ return $ Nothing
 
 workshop :: Card
 workshop = defCard
-    { cardAction = actionGainCardUpTo 4
+    { cardAction = \cs gs -> MaybeT $ return $ actionGainCardUpTo 4 cs gs
     , cardCost = 3
     , cardName = "workshop"
     , cardType = defCardType { action = True }
     }
     where
-        actionGainCardUpTo :: Int -> [Card] -> GameState -> Maybe GameState
-        actionGainCardUpTo n [c] gs = if cardCost c > n
+        actionGainCardUpTo :: Int -> ActionParams -> GameState -> Maybe GameState
+        actionGainCardUpTo n (APList [c]) gs = if cardCost c > n
             then Nothing
             else do
                 gs' <- drawCardFromSupply c gs
@@ -251,14 +255,14 @@ market = defCard
 
 mine :: Card
 mine = defCard
-    { cardAction = exchangeTreasure
+    { cardAction = \cs gs -> MaybeT $ return $ exchangeTreasure cs gs
     , cardCost = 4
     , cardName = "mine"
     , cardType = defCardType { action = True }
     }
     where
-        exchangeTreasure :: [Card] -> GameState -> Maybe GameState
-        exchangeTreasure [c] gs = do
+        exchangeTreasure :: ActionParams -> GameState -> Maybe GameState
+        exchangeTreasure (APList [c]) gs = do
             c' <- if c==copper
                 then return silver
                 else if c==silver
@@ -273,14 +277,14 @@ mine = defCard
 
 remodel :: Card
 remodel = defCard 
-    { cardAction = exchangeCards
+    { cardAction = \cs gs -> MaybeT $ return $ exchangeCards cs gs
     , cardCost = 4
     , cardName = "remodel"
     , cardType = defCardType { action = True }
     }
     where
-        exchangeCards :: [Card] -> GameState -> Maybe GameState
-        exchangeCards [c1,c2] gs = do
+        exchangeCards :: ActionParams -> GameState -> Maybe GameState
+        exchangeCards (APList [c1,c2]) gs = do
             when (cardCost c2 > cardCost c1+2) Nothing
             gs' <- drawCardFromSupply c2 gs
             updatePlayerStateM CurrentPlayer (\ps -> do
@@ -343,13 +347,13 @@ merchant = defCard
 
 artisan :: Card
 artisan = defCard
-    { cardAction = artisanAction
+    { cardAction = \cs gs -> MaybeT $ return $ artisanAction cs gs
     , cardCost = 6
     , cardName = "artisan"
     , cardType = defCardType { action = True }
     }
     where
-        artisanAction (c1:c2:[]) gs = do
+        artisanAction (APList (c1:c2:[])) gs = do
             gs <- drawCardFromSupply c1 gs
             _ <- find (==c2) $ hand $ getCurrentPlayerState gs
             let f ps = ps
@@ -393,28 +397,29 @@ moat = defCard
 bandit :: Card
 bandit = defCard
     { cardAction = \cs gs -> do
-        gs <- drawCardFromSupply gold gs
+        gs <- MaybeT $ return $ drawCardFromSupply gold gs
         return $ updatePlayerState CurrentPlayer (\ps -> ps { discard = gold:discard ps }) gs
-    , cardAttack = \i gs -> updatePlayerState (OnlyPlayer i) trashGoodMoney gs
+    , cardAttack = \i gs -> updatePlayerStateM (OnlyPlayer i) trashGoodMoney gs
     , cardCost = 5
     , cardName = "bandit"
     , cardType = defCardType { action = True, attack = True }
     }
     where
-        trashGoodMoney :: PlayerState -> PlayerState
-        trashGoodMoney ps = ps' { discard = cs'++discard ps }
-            where
-                (cs,ps') = getNextCards 2 ps
-                cs' = if elem gold cs
+        trashGoodMoney :: MonadRandom m => PlayerState -> m PlayerState
+        trashGoodMoney ps = do
+            (cs,ps') <- getNextCards 2 ps
+            let cs' = if elem gold cs
                     then delete gold cs
                     else delete silver cs
+            return $ ps' { discard = cs'++discard ps }
+            where
 
 bureaucrat :: Card
 bureaucrat = defCard
     { cardAction = \cs gs -> do 
-        gs <- drawCardFromSupply silver gs
+        gs <- MaybeT $ return $ drawCardFromSupply silver gs
         return $ updatePlayerState CurrentPlayer (\ps -> ps { deck = silver:deck ps }) gs
-    , cardAttack = \i gs -> updatePlayerState (OnlyPlayer i) mvVPHandToDeck gs 
+    , cardAttack = \i gs -> return $ updatePlayerState (OnlyPlayer i) mvVPHandToDeck gs 
     , cardCost = 4
     , cardName = "bureaucrat"
     , cardType = defCardType { action = True, attack = True }
@@ -435,7 +440,7 @@ bureaucrat = defCard
 militia :: Card
 militia = defCard
     { cardAction = actionAddMoney 2
-    , cardAttack = \i gs -> updatePlayerState (OnlyPlayer i) discardDownTo3 gs
+    , cardAttack = \i gs -> return $ updatePlayerState (OnlyPlayer i) discardDownTo3 gs
     , cardCost = 4
     , cardName = "militia"
     , cardType = defCardType { action = True, attack = True }
@@ -459,7 +464,7 @@ militia = defCard
 witch :: Card
 witch = defCard
     { cardAction = actionDrawCards 2
-    , cardAttack = \i gs -> case drawCardFromSupply curse gs of
+    , cardAttack = \i gs -> return $ case drawCardFromSupply curse gs of
         Nothing -> gs
         Just gs' -> updatePlayerState (OnlyPlayer i) (\ps -> ps { discard = curse:discard ps }) gs'
     , cardCost = 5
@@ -469,23 +474,25 @@ witch = defCard
 
 --------------------
 
-actionDrawCards :: Int -> [Card] -> GameState -> Maybe GameState
-actionDrawCards n _ gs = return $ updatePlayerState CurrentPlayer (drawCards n) gs
+actionDrawCards :: MonadRandom m => Int -> ActionParams -> GameState -> MaybeT m GameState
+actionDrawCards n _ gs = updatePlayerStateM CurrentPlayer (drawCards n) gs
 
-actionAllPlayersDrawCards :: Int -> [Card] -> GameState -> Maybe GameState
-actionAllPlayersDrawCards n _ gs = return $ gs { playerStates = map (drawCards n) $ playerStates gs }
+actionAllPlayersDrawCards :: MonadRandom m => Int -> ActionParams -> GameState -> MaybeT m GameState
+actionAllPlayersDrawCards n _ gs = do
+    playerStates' <- mapM (drawCards n) $ playerStates gs
+    return $ gs { playerStates = playerStates' } 
 
-actionAddActions :: Int -> [Card] -> GameState -> Maybe GameState
+actionAddActions :: MonadRandom m => Int -> ActionParams -> GameState -> MaybeT m GameState
 actionAddActions n _ gs = return $ updatePlayerState CurrentPlayer addActions gs
     where
         addActions ps = ps { actions = actions ps + n }
 
-actionAddBuys :: Int -> [Card] -> GameState -> Maybe GameState
-actionAddBuys n _ = updatePlayerStateM CurrentPlayer $ \ps -> Just $ ps { buys = buys ps + n }
+actionAddBuys :: MonadRandom m => Int -> ActionParams -> GameState -> MaybeT m GameState
+actionAddBuys n _ = updatePlayerStateM CurrentPlayer $ \ps -> return $ ps { buys = buys ps + n }
 
-actionAddMoney :: Int -> [Card] -> GameState -> Maybe GameState
-actionAddMoney n _ = updatePlayerStateM CurrentPlayer $ \ps -> Just $ ps {money = money ps + n }
+actionAddMoney :: MonadRandom m => Int -> ActionParams -> GameState -> MaybeT m GameState
+actionAddMoney n _ = updatePlayerStateM CurrentPlayer $ \ps -> return $ ps {money = money ps + n }
 
-actionNone :: [Card] -> GameState -> Maybe GameState
-actionNone _ _ = Nothing
+actionNone :: MonadRandom m => ActionParams -> GameState -> MaybeT m GameState
+actionNone _ gs = return gs
 

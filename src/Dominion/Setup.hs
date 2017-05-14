@@ -28,8 +28,8 @@ silverAndGold = [bandit,bureaucrat,chapel,harbinger,laboratory,merchant,mine,mon
 
 ----------------------------------------
 
-initPlayerState :: StdGen -> PlayerState
-initPlayerState stdgen = cleanUpPhase $ PlayerState
+initPlayerState :: MonadRandom m => m PlayerState
+initPlayerState = cleanUpPhase $ PlayerState
     { deck = [] 
     , hand = []
     , played = []
@@ -38,7 +38,6 @@ initPlayerState stdgen = cleanUpPhase $ PlayerState
     , buys = 0
     , money = 0
     , turnsCompleted = -1
-    , stdgen = stdgen
     }
 
 mkSupply 

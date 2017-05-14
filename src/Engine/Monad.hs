@@ -16,7 +16,7 @@ data MessageType
     deriving (Read,Show,Eq,Ord)
 
 newtype Sim a = Sim (RandT StdGen (Writer (D.DList (MessageType,String))) a)
-    deriving (Functor,Applicative,Monad)
+    deriving (Functor,Applicative,Monad,MonadRandom)
 
 writeMsg :: MessageType -> String -> Sim ()
 writeMsg t str = Sim $ do

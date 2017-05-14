@@ -1,6 +1,8 @@
 module Dominion.Policy.Simple
     where
 
+import Control.Monad.Random
+import Control.Monad.Trans.Maybe
 import Data.Monoid
 import Debug.Trace
 
@@ -283,15 +285,15 @@ engSV4 = defPolicy
     { policyName = "engine smithy+village v4"
     , policyAction = \gs -> let ps = getCurrentPlayerState gs in
         ( (if countNumCards ps village < countNumCards ps smithy
-            then try (Play remodel [estate,village])
-            else try (Play remodel [estate,smithy])
+            then try (Play remodel $ APList [estate,village])
+            else try (Play remodel $ APList [estate,smithy])
           )
        <> (if countNumCards ps moat < 3 && countNumCards ps silver >= 2
-            then try (Play remodel [copper,moat])
+            then try (Play remodel $ APList [copper,moat])
             else pass
           )
        <> (if countNumCards ps smithy >= 3
-            then try (Play remodel [gold,province])
+            then try (Play remodel $ APList [gold,province])
             else pass
           )
        <> playMoney
@@ -342,8 +344,8 @@ playAllCards
    <> play witch
    <> playLibrary
    <> playArtisan
-   <> try (Play mine [silver])
-   <> try (Play mine [copper])
+   <> try (Play mine $ APList [silver])
+   <> try (Play mine $ APList [copper])
    <> playList [silver,gold]
    <> playList [merchant]
    <> playList [copper]
@@ -354,7 +356,7 @@ playAllCards
    where
         -- FIXME: All of these functions are broken
         playHarbinger :: GameState -> Action
-        playHarbinger gs = try (Play harbinger xs) gs
+        playHarbinger gs = try (Play harbinger $ APList xs) gs
             where
                 xs = []
 
@@ -374,21 +376,21 @@ playAllCards
         playSentry gs = Pass
 
 playCellar :: GameState -> Action
-playCellar gs = try (Play cellar $ filter isBadCard $ hand ps) gs
+playCellar gs = try (Play cellar $ APList $ filter isBadCard $ hand ps) gs
     where
         isBadCard c = (c==copper) || (not $ treasure $ cardType c)
         ps = getCurrentPlayerState gs
 
 playRemodel :: GameState -> Action
 playRemodel = do
-    try (Play remodel [estate,smithy])
-    try (Play remodel [cellar,village])
-    try (Play remodel [copper,cellar])
-    try (Play remodel [remodel,gold])
-    try (Play remodel [gold,province])
+    try (Play remodel $ APList [estate,smithy])
+    try (Play remodel $ APList [cellar,village])
+    try (Play remodel $ APList [copper,cellar])
+    try (Play remodel $ APList [remodel,gold])
+    try (Play remodel $ APList [gold,province])
 
 playChapel :: GameState -> Action
-playChapel gs = flip try gs $ Play chapel $ go (totalMoney $ hand ps) [] $ hand ps
+playChapel gs = flip try gs $ Play chapel $ APList $ go (totalMoney $ hand ps) [] $ hand ps
     where
         ps = getCurrentPlayerState gs
 
@@ -440,18 +442,18 @@ pass :: GameState -> Action
 pass _ = Pass
 
 try :: Action -> GameState -> Action
-try a gs = case resolveAction a gs of
+try a gs = case evalRand (runMaybeT (resolveAction a gs)) (mkStdGen 0) of
     Nothing -> Pass
     Just _  -> a
 
 play :: Card -> GameState -> Action
-play c = try (Play c [])
+play c = try (Play c $ APList [])
 
 tryList :: [Action] -> GameState -> Action
 tryList = fmap mconcat . mapM try
 
 playList :: [Card] -> GameState -> Action
-playList = tryList . map (\c -> Play c [])
+playList = tryList . map (\c -> Play c $ APList [])
 
 playMoney :: GameState -> Action
 playMoney = playList [gold,silver,copper]

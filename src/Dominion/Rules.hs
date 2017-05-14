@@ -3,10 +3,14 @@ module Dominion.Rules
 
 import Control.Monad
 import Control.Monad.Random
+import Control.Monad.State
+import Control.Monad.Trans.Maybe
 import Data.List
 import Data.Monoid
 import System.Random.Shuffle
 import Debug.Trace
+
+import Engine.Monad
 
 ----------------------------------------
 
@@ -21,8 +25,8 @@ import Debug.Trace
 -- The moat's reaction ability is hardcoded in the `resolveAction` function rather than appearing as a property here.
 data Card = Card
     { cardVPs       :: PlayerState -> Int
-    , cardAction    :: [Card] -> GameState -> Maybe GameState
-    , cardAttack    :: PlayerID -> GameState -> GameState
+    , cardAction    :: forall m. MonadRandom m => ActionParams -> GameState -> MaybeT m GameState
+    , cardAttack    :: forall m. MonadRandom m => PlayerID -> GameState -> m GameState
     , cardCost      :: Int
     , cardName      :: String
     , cardType      :: CardType
@@ -33,6 +37,11 @@ instance Show Card where
 
 instance Eq Card where
     c1==c2 = (cardName c1)==(cardName c2)
+
+data ActionParams 
+    = APNone
+    | APList [Card]
+    deriving (Show,Eq)
 
 data CardType = CardType
     { action    :: Bool
@@ -53,7 +62,6 @@ data PlayerState = PlayerState
     , buys              :: Int
     , money             :: Int
     , turnsCompleted    :: Int
-    , stdgen            :: StdGen 
     }
     deriving (Show)
 
@@ -63,29 +71,49 @@ getAllCards ps = deck ps ++ hand ps ++ played ps ++ discard ps
 countNumCards :: PlayerState -> Card -> Int
 countNumCards ps c = length $ filter (==c) $ getAllCards ps
 
-getNextCards :: Int -> PlayerState -> ([Card],PlayerState)
-getNextCards 0 ps = ([],ps)
+getNextCards :: MonadRandom m => Int -> PlayerState -> m ([Card],PlayerState)
+getNextCards 0 ps = return ([],ps)
 getNextCards n ps = case deck ps of
     [] -> case discard ps of
-        [] -> ([],ps)
-        _  -> getNextCards n $ ps
-            { deck = deck'
-            , discard = []
-            , stdgen = sg2
-            }
-            where
-                (sg1,sg2) = split $ stdgen ps
-                deck' = shuffle' (discard ps) (length $ discard ps) sg1
-    (c:cs) -> (c:cs',ps')
-        where
-            (cs',ps') = getNextCards (n-1) $ ps { deck = cs }
+        [] -> return ([],ps)
+        _  -> do
+            deck' <- shuffleM $ discard ps
+            getNextCards n $ ps
+                { deck = deck'
+                , discard = []
+                }
+    (c:cs) -> do
+        (cs',ps') <- getNextCards (n-1) $ ps { deck = cs }
+        return (c:cs',ps')
 
-drawCards :: Int -> PlayerState -> PlayerState
-drawCards n ps = ps' { hand = cs ++ hand ps' }
-    where
-        (cs,ps') = getNextCards n ps
+drawCards :: MonadRandom m => Int -> PlayerState -> m PlayerState
+drawCards n ps = do
+    (cs,ps') <- getNextCards n ps
+    return $ ps' { hand = cs ++ hand ps' }
 
-cleanUpPhase :: PlayerState -> PlayerState
+-- getNextCards :: Int -> PlayerState -> ([Card],PlayerState)
+-- getNextCards 0 ps = ([],ps)
+-- getNextCards n ps = case deck ps of
+--     [] -> case discard ps of
+--         [] -> ([],ps)
+--         _  -> getNextCards n $ ps
+--             { deck = deck'
+--             , discard = []
+--             , stdgen = sg2
+--             }
+--             where
+--                 (sg1,sg2) = split $ stdgen ps
+--                 deck' = shuffle' (discard ps) (length $ discard ps) sg1
+--     (c:cs) -> (c:cs',ps')
+--         where
+--             (cs',ps') = getNextCards (n-1) $ ps { deck = cs }
+-- 
+-- drawCards :: Int -> PlayerState -> PlayerState
+-- drawCards n ps = ps' { hand = cs ++ hand ps' }
+--     where
+--         (cs,ps') = getNextCards n ps
+
+cleanUpPhase :: MonadRandom m => PlayerState -> m PlayerState
 cleanUpPhase ps = drawCards 5 $ PlayerState
     { deck = deck ps
     , hand = []
@@ -95,7 +123,6 @@ cleanUpPhase ps = drawCards 5 $ PlayerState
     , buys = 1
     , money = 0
     , turnsCompleted = turnsCompleted ps + 1
-    , stdgen = stdgen ps
     }
 
 ----------------------------------------
@@ -110,19 +137,40 @@ vpDensity gs = (fromIntegral $ totalVPs gs) / (genericLength $ getAllCards ps)
     where
         ps = getCurrentPlayerState gs
 
-totalTreasure :: GameState -> Int
-totalTreasure gs = sum (map go $ getAllCards ps)
-    where
-        ps = getCurrentPlayerState gs
+-- totalTreasure :: GameState -> Int
+-- totalTreasure gs = sum (map go $ getAllCards ps)
+--     where
+--         ps = getCurrentPlayerState gs
+-- 
+--         go c = if treasure $ cardType c
+--             then case cardAction c APNone gs of
+--                 Nothing -> 0
+--                 Just gs' -> money (getCurrentPlayerState gs') - money (getCurrentPlayerState gs) 
+--             else 0
+-- 
+-- treasureDensity :: GameState -> Double
+-- treasureDensity gs = (fromIntegral $ totalTreasure gs) / (genericLength $ getAllCards $ getCurrentPlayerState gs)
 
-        go c = if treasure $ cardType c
-            then case cardAction c [] gs of
-                Nothing -> 0
-                Just gs' -> money (getCurrentPlayerState gs') - money (getCurrentPlayerState gs) 
-            else 0
+----------------------------------------
 
-treasureDensity :: GameState -> Double
-treasureDensity gs = (fromIntegral $ totalTreasure gs) / (genericLength $ getAllCards $ getCurrentPlayerState gs)
+newtype GameStateM a = GameStateM 
+    ( MaybeT
+        ( RandT StdGen
+            ( State GameState
+            )
+        )
+      a
+    )
+    deriving (Functor,Applicative,Monad,MonadRandom,MonadState GameState)
+
+-- runGameStateM :: GameState -> GameStateM () -> Sim (Maybe GameState)
+-- runGameStateM gs (GameStateM m) = do
+--     sg <- getSplit
+--     m' <- runMaybeT _m
+--     case m' of 
+--         Nothing -> return Nothing
+--         Just x -> return Nothing
+--     return Nothing
 
 ----------------------------------------
 
@@ -165,15 +213,30 @@ updatePlayerState w f gs = case updatePlayerStateM w (Just . f) gs of
     Just gs -> gs
 
 updatePlayerStateM 
-    :: WhichPlayers
-    -> (PlayerState -> Maybe PlayerState)
-    -> (GameState   -> Maybe GameState  )
+    :: Monad m
+    => WhichPlayers
+    -> (PlayerState -> m PlayerState)
+    -> (GameState   -> m GameState  )
 updatePlayerStateM CurrentPlayer f gs = updatePlayerStateM (OnlyPlayer $ currentPlayer gs) f gs
 updatePlayerStateM (OnlyPlayer i) f gs = do
     playerStates' <- forM (zip [0..] $ playerStates gs) $ \(i',ps') -> if i/=i'
         then return ps'
         else f ps'
     return $ gs { playerStates = playerStates' }
+
+updatePSM   
+    :: WhichPlayers
+    -> (PlayerState -> GameStateM PlayerState )
+    -> GameStateM ()
+updatePSM CurrentPlayer f = do
+    gs <- get
+    updatePSM (OnlyPlayer $ currentPlayer gs) f 
+updatePSM (OnlyPlayer i) f = do
+    gs <- get
+    playerStates' <- forM (zip [0..] $ playerStates gs) $ \(i',ps') -> if i/=i'
+        then return ps'
+        else f ps'
+    put $ gs { playerStates = playerStates' }
 
 cardsInSupply :: GameState -> Card -> Int
 cardsInSupply gs c = case lookup c $ supply gs of
@@ -255,10 +318,36 @@ resolveBuy (Buy cs) gs = go cs gs
             where
                 ps = getCurrentPlayerState gs
 
+doBuy :: (GameState -> Buy) -> GameState -> Sim GameState
+doBuy getBuy gs = case resolveBuy cmdbuy gs of
+    Nothing -> do
+        writeMsg Turn $ "  "++ "attempted to play: "++show cmdbuy
+        return gs
+    Just gs' -> do
+        let ps' = getCurrentPlayerState gs'
+        writeMsg Turn $ "  "++ padRight 30 (show cmdbuy) 
+                            ++ "buys:"++show (buys ps')
+                            ++ "; money: "++show (money ps')
+                            ++ "; actions: "++show (actions ps')
+        doBuy getBuy gs'
+    where
+        cmdbuy :: Buy
+        cmdbuy = getBuy gs
+
+validBuys :: GameState -> [Buy]
+validBuys gs = Buy [] : if buys ps == 0
+    then []
+    else map (\x -> Buy [fst x]) $ filter go $ supply gs
+    where
+        go (c,0) = False
+        go (c,_) = cardCost c <= money ps
+
+        ps = getCurrentPlayerState gs
+
 ----------------------------------------
 
 data Action
-    = Play Card [Card]
+    = Play Card ActionParams
     | Pass
     deriving (Show)
 
@@ -267,27 +356,54 @@ instance Monoid Action where
     x    `mappend` _ = x
     mempty = Pass
 
-resolveAction :: Action -> GameState -> Maybe GameState
-resolveAction Pass        gs = Nothing
+resolveAction :: MonadRandom m => Action -> GameState -> MaybeT m GameState
+resolveAction Pass        gs = fail "pass"
 resolveAction (Play c cs) gs = do
     gs <- updatePlayerStateM CurrentPlayer (\ps -> 
         if (action (cardType c) && actions ps <1)
-            then Nothing
+            then fail "insufficient actions"
             else if action (cardType c)
-                then Just $ ps { actions = actions ps -1 }
-                else Just $ ps 
+                then return $ ps { actions = actions ps - 1 }
+                else return $ ps 
             ) gs
     gs <- updatePlayerStateM CurrentPlayer (putCardOnTable c) gs
     gs <- cardAction c cs gs
-    gs <- Just $ foldr doReaction gs $ getNoncurrentPlayerIDs gs
+    gs <- foldM doReaction gs $ getNoncurrentPlayerIDs gs
     return gs
     where
-        doReaction :: PlayerID -> GameState -> GameState
-        doReaction i gs = case find (\c -> reaction $ cardType c) $ hand $ playerStates gs !! i of
-            Just _  -> gs
+        doReaction :: MonadRandom m => GameState -> PlayerID -> m GameState
+        doReaction gs i = case find (\c -> reaction $ cardType c) $ hand $ playerStates gs !! i of
+            Just _  -> return gs
             Nothing -> if attack $ cardType c 
                 then cardAttack c i gs
-                else gs
+                else return gs
+
+
+        putCardOnTable :: Monad m => Card -> PlayerState -> MaybeT m PlayerState
+        putCardOnTable c ps = if c `elem` hand ps
+            then return $ ps
+                { hand = delete c $ hand ps
+                , played = c:played ps
+                }
+            else fail "card not in hand"
+
+doAction :: (GameState -> Action) -> GameState -> Sim GameState
+doAction getAction gs = do
+    gs' <- runMaybeT $ resolveAction action gs  
+    case gs' of
+        Nothing -> return gs
+        Just gs' -> do
+            let ps' = getCurrentPlayerState gs'
+            writeMsg Turn $ "  "++ padRight 30 (show action) 
+                                ++ "buys:"++show (buys ps')
+                                ++ "; money: "++show (money ps')
+                                ++ "; actions: "++show (actions ps')
+            doAction getAction gs'
+    where
+        action :: Action
+        action = getAction gs
+
+padRight n xs = xs ++ replicate (n-length xs) ' ' 
 
 ----------------------------------------
 
@@ -393,10 +509,3 @@ drawCardFromSupply c gs = case lookup c $ supply gs of
             then (c',i-1)
             else (c',i)
 
-putCardOnTable :: Card -> PlayerState -> Maybe PlayerState
-putCardOnTable c ps = if c `elem` hand ps
-    then Just ps
-        { hand = delete c $ hand ps
-        , played = c:played ps
-        }
-    else Nothing
