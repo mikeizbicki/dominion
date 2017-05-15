@@ -2,7 +2,7 @@ module Dominion.Rules
     where
 
 import Control.Monad
-import Control.Monad.Random
+import Control.Monad.Random hiding (mkStdGen)
 import Control.Monad.State
 import Control.Monad.Trans.Maybe
 import Data.List
@@ -54,7 +54,8 @@ data CardType = CardType
 ----------------------------------------
 
 data PlayerState = PlayerState
-    { deck              :: [Card]
+    { deck              :: [Card]       -- ^ cards in the deck whose order is unknown
+    , deckTop           :: [Card]       -- ^ cards known to be on the top of the deck
     , hand              :: [Card]
     , played            :: [Card]
     , discard           :: [Card]
@@ -66,56 +67,41 @@ data PlayerState = PlayerState
     deriving (Show)
 
 getAllCards :: PlayerState -> [Card]
-getAllCards ps = deck ps ++ hand ps ++ played ps ++ discard ps
+getAllCards ps = deck ps ++ deckTop ps ++ hand ps ++ played ps ++ discard ps
 
 countNumCards :: PlayerState -> Card -> Int
 countNumCards ps c = length $ filter (==c) $ getAllCards ps
 
 getNextCards :: MonadRandom m => Int -> PlayerState -> m ([Card],PlayerState)
 getNextCards 0 ps = return ([],ps)
-getNextCards n ps = case deck ps of
-    [] -> case discard ps of
-        [] -> return ([],ps)
-        _  -> do
-            deck' <- shuffleM $ discard ps
-            getNextCards n $ ps
-                { deck = deck'
-                , discard = []
-                }
+getNextCards n ps = case deckTop ps of
     (c:cs) -> do
-        (cs',ps') <- getNextCards (n-1) $ ps { deck = cs }
+        (cs',ps') <- getNextCards (n-1) $ ps { deckTop = cs }
         return (c:cs',ps')
+    [] -> do
+        deck' <- shuffleM $ deck ps
+        case deck' of
+            [] -> case discard ps of
+                [] -> return ([],ps)
+                _  -> do
+                    deck' <- shuffleM $ discard ps
+                    getNextCards n $ ps
+                        { deck = deck'
+                        , discard = []
+                        }
+            (c:cs) -> do
+                (cs',ps') <- getNextCards (n-1) $ ps { deck = cs }
+                return (c:cs',ps')
 
 drawCards :: MonadRandom m => Int -> PlayerState -> m PlayerState
 drawCards n ps = do
     (cs,ps') <- getNextCards n ps
     return $ ps' { hand = cs ++ hand ps' }
 
--- getNextCards :: Int -> PlayerState -> ([Card],PlayerState)
--- getNextCards 0 ps = ([],ps)
--- getNextCards n ps = case deck ps of
---     [] -> case discard ps of
---         [] -> ([],ps)
---         _  -> getNextCards n $ ps
---             { deck = deck'
---             , discard = []
---             , stdgen = sg2
---             }
---             where
---                 (sg1,sg2) = split $ stdgen ps
---                 deck' = shuffle' (discard ps) (length $ discard ps) sg1
---     (c:cs) -> (c:cs',ps')
---         where
---             (cs',ps') = getNextCards (n-1) $ ps { deck = cs }
--- 
--- drawCards :: Int -> PlayerState -> PlayerState
--- drawCards n ps = ps' { hand = cs ++ hand ps' }
---     where
---         (cs,ps') = getNextCards n ps
-
 cleanUpPhase :: MonadRandom m => PlayerState -> m PlayerState
 cleanUpPhase ps = drawCards 5 $ PlayerState
     { deck = deck ps
+    , deckTop = deckTop ps
     , hand = []
     , played = []
     , discard = hand ps ++ played ps ++ discard ps
@@ -153,27 +139,6 @@ vpDensity gs = (fromIntegral $ totalVPs gs) / (genericLength $ getAllCards ps)
 
 ----------------------------------------
 
-newtype GameStateM a = GameStateM 
-    ( MaybeT
-        ( RandT StdGen
-            ( State GameState
-            )
-        )
-      a
-    )
-    deriving (Functor,Applicative,Monad,MonadRandom,MonadState GameState)
-
--- runGameStateM :: GameState -> GameStateM () -> Sim (Maybe GameState)
--- runGameStateM gs (GameStateM m) = do
---     sg <- getSplit
---     m' <- runMaybeT _m
---     case m' of 
---         Nothing -> return Nothing
---         Just x -> return Nothing
---     return Nothing
-
-----------------------------------------
-
 data GameConfig = GameConfig
     { players :: [Policy]
     }
@@ -186,6 +151,7 @@ data GameState = GameState
     }
 
 type PlayerID = Int
+
 
 getPlayerIDs :: GameState -> [PlayerID]
 getPlayerIDs gs = [0..numPlayers gs-1]
@@ -206,7 +172,7 @@ setCurrentPlayerState gs ps = gs { playerStates = go (currentPlayer gs) (playerS
         go i (x:xs) = x:go (i-1) xs
 
 updatePlayerState
-    :: WhichPlayers
+    :: WhichPlayer
     -> (PlayerState -> PlayerState)
     -> (GameState   -> GameState  )
 updatePlayerState w f gs = case updatePlayerStateM w (Just . f) gs of
@@ -214,7 +180,7 @@ updatePlayerState w f gs = case updatePlayerStateM w (Just . f) gs of
 
 updatePlayerStateM 
     :: Monad m
-    => WhichPlayers
+    => WhichPlayer
     -> (PlayerState -> m PlayerState)
     -> (GameState   -> m GameState  )
 updatePlayerStateM CurrentPlayer f gs = updatePlayerStateM (OnlyPlayer $ currentPlayer gs) f gs
@@ -224,19 +190,20 @@ updatePlayerStateM (OnlyPlayer i) f gs = do
         else f ps'
     return $ gs { playerStates = playerStates' }
 
-updatePSM   
-    :: WhichPlayers
-    -> (PlayerState -> GameStateM PlayerState )
-    -> GameStateM ()
-updatePSM CurrentPlayer f = do
-    gs <- get
-    updatePSM (OnlyPlayer $ currentPlayer gs) f 
-updatePSM (OnlyPlayer i) f = do
-    gs <- get
-    playerStates' <- forM (zip [0..] $ playerStates gs) $ \(i',ps') -> if i/=i'
-        then return ps'
-        else f ps'
-    put $ gs { playerStates = playerStates' }
+data WhichPlayer
+    = CurrentPlayer
+    | OnlyPlayer PlayerID
+
+drawCardFromSupply :: Card -> GameState -> Maybe GameState
+drawCardFromSupply c gs = case lookup c $ supply gs of
+    Nothing -> Nothing
+    Just i -> if i>0
+        then Just $ gs { supply = map go $ supply gs }
+        else Nothing
+    where
+        go (c',i) = if c==c' && i>0
+            then (c',i-1)
+            else (c',i)
 
 cardsInSupply :: GameState -> Card -> Int
 cardsInSupply gs c = case lookup c $ supply gs of
@@ -251,6 +218,20 @@ getWinner gs = head $ elemIndices maxScore scores
 
         scores :: [Score]
         scores = map (getScore gs) $ getPlayerIDs gs
+
+isGameOver :: GameState -> Bool
+isGameOver gs = noprovince || empty3
+    where
+        noprovince = any go $ supply gs
+            where
+                go (c,i) = if show c=="province" && i==0
+                    then True
+                    else False
+
+        empty3 = (sum $ map go $ supply gs) >= 3
+            where
+                go (_,0) = 1
+                go _     = 0
 
 ----------------------------------------
 
@@ -406,106 +387,4 @@ doAction getAction gs = do
 padRight n xs = xs ++ replicate (n-length xs) ' ' 
 
 ----------------------------------------
-
-data Pile
-    = Supply
-    | Deck
-    | Hand
-    | Discard
-    | Played
-    | Trash
-
-data WhichPlayers
-    = CurrentPlayer
-    | NoncurrentPlayers
-    | AllPlayers 
-    | OnlyPlayer PlayerID
-
--- | 
-mvCard 
-    :: WhichPlayers 
-    -> Card                 -- ^ card to move 
-    -> Pile                 -- ^ source pile 
-    -> Pile                 -- ^ destination pile
-    -> GameState 
-    -> Maybe GameState
-mvCard (OnlyPlayer pid) c p1 p2 gs = do
-    let ps = playerStates gs !! pid
-
-    supply' <- case p1 of
-        Supply -> do
-            n <- lookup c $ supply gs
-            if n > 0
-                then Just $ flip map (supply gs) $ \(c',n') -> if c==c'
-                    then (c',n'-1)
-                    else (c',n')
-                else Nothing
-        _ -> Just $ supply gs
-       
-    supply' <- case p2 of
-        Supply -> error "cannot add cards to supply"
-        _ -> return supply'
-
-    deck' <- case p1 of
-        Deck -> do
-            find (==c) $ deck ps
-            return $ delete c $ deck ps
-        _ -> return $ deck ps
-
-    deck' <- case p2 of
-        Deck -> return $ c:deck ps
-        _ -> return deck'
-
-    hand' <- case p1 of
-        Hand -> do
-            find (==c) $ hand ps
-            return $ delete c $ hand ps
-        _ -> return $ hand ps
-
-    hand' <- case p2 of
-        Hand -> return $ c:hand'
-        _ -> return hand'
-
-    discard' <- case p1 of
-        Discard -> do
-            find (==c) $ discard ps
-            return $ delete c $ discard ps
-        _ -> return $ discard ps
-
-    discard' <- case p2 of
-        Discard -> return $ c:discard'
-        _ -> return discard'
-
-    played' <- case p1 of
-        Played -> do
-            find (==c) $ played ps
-            return $ delete c $ played ps
-        _ -> return $ played ps
-
-    played' <- case p2 of
-        Played -> return $ c:played'
-        _ -> return played'
-
-    return $ gs 
-        { supply = supply'
-        , playerStates = flip map (zip [0..] $ playerStates gs) $ \(i',ps') -> if pid==i'
-            then ps'
-                { deck = deck'
-                , hand = hand'
-                , discard = discard'
-                , played = played'
-                }
-            else ps'
-        }
-
-drawCardFromSupply :: Card -> GameState -> Maybe GameState
-drawCardFromSupply c gs = case lookup c $ supply gs of
-    Nothing -> Nothing
-    Just i -> if i>0
-        then Just $ gs { supply = map go $ supply gs }
-        else Nothing
-    where
-        go (c',i) = if c==c' && i>0
-            then (c',i-1)
-            else (c',i)
 

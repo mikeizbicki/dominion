@@ -1,6 +1,7 @@
 module Dominion.Policy.Simple
     where
 
+import Control.Monad.Writer
 import Control.Monad.Random
 import Control.Monad.Trans.Maybe
 import Data.Monoid

@@ -3,8 +3,11 @@ module Engine.Monad
 
 import Control.Monad
 import Control.Monad.Random
+import Control.Monad.State
 import Control.Monad.Writer
 import qualified Data.DList as D
+
+import System.IO.Unsafe
 
 ----------------------------------------
 
@@ -15,17 +18,18 @@ data MessageType
     | None
     deriving (Read,Show,Eq,Ord)
 
-newtype Sim a = Sim (RandT StdGen (Writer (D.DList (MessageType,String))) a)
+newtype Sim a = Sim 
+    ( RandT StdGen 
+        ( Writer
+            ( D.DList (MessageType,String) )
+        ) 
+      a
+    )
     deriving (Functor,Applicative,Monad,MonadRandom)
 
 writeMsg :: MessageType -> String -> Sim ()
 writeMsg t str = Sim $ do
     tell $ D.fromList [(t,str)]
-
-mkStdGen :: Sim StdGen
-mkStdGen = Sim $ do
-    r <- getRandom
-    return $ Control.Monad.Random.mkStdGen r
 
 runSim :: MessageType -> Sim a -> IO a
 runSim t (Sim m) = do
@@ -40,3 +44,6 @@ runSim t (Sim m) = do
                 then putStrLn str
                 else return ()
             go xs
+
+-- evalSim :: s -> Sim s a -> s
+-- evalSim s m = unsafePerformIO (runSim None s m)
